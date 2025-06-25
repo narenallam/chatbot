@@ -52,7 +52,6 @@ const Title = styled.h3`
 
 const Controls = styled.div`
   padding: 0 20px 20px;
-  border-bottom: 1px solid #333;
 `;
 
 const ClearButton = styled.button`
@@ -210,25 +209,27 @@ const StatValue = styled.span`
 `;
 
 const NewConversationButton = styled.button`
-  background: rgba(0, 255, 255, 0.1);
-  border: 1px solid rgba(0, 255, 255, 0.3);
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.1) 0%, rgba(0, 200, 255, 0.1) 100%);
+  border: 1px solid #00ffff;
   color: #00ffff;
+  padding: 8px 12px;
   border-radius: 25px;
-  padding: 6px 10px;
-  font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  gap: 4px;
-  width: 80%;
+  gap: 6px;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  width: 60%;
   justify-content: center;
-  margin: 0 auto 8px auto;
+  margin: 0 auto;
   
   &:hover {
-    background: rgba(0, 255, 255, 0.2);
-    border-color: rgba(0, 255, 255, 0.5);
-    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+    color: #ffffff;
+    border-color: #00ffff;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(0, 200, 255, 0.2) 100%);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
   }
 `;
 

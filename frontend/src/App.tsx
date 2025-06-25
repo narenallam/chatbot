@@ -365,11 +365,23 @@ function App() {
       timestamp: new Date(),
       neonColor: getRandomNeonColor()
     };
-    const newMessages = [...messages, userMessage];
+    let newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+
+    // Create AI message placeholder
+    const aiMessageId = (Date.now() + 1).toString();
+    const aiMessage: ChatMessage = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      neonColor: getRandomNeonColor()
+    };
+    newMessages = [...newMessages, aiMessage];
     setMessages(newMessages);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/chat`, {
+      const response = await fetch(`${BACKEND_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -380,30 +392,74 @@ function App() {
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const aiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.message || 'No response received',
-          timestamp: new Date(),
-          neonColor: getRandomNeonColor()
-        };
-        const finalMessages = [...newMessages, aiMessage];
-        setMessages(finalMessages);
-        updateCurrentConversation(finalMessages);
-      } else {
+      if (!response.ok) {
         throw new Error('Failed to get AI response');
       }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body reader');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'content') {
+                currentContent += data.content;
+                
+                // Update the AI message with streaming content
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMessageId 
+                    ? { ...msg, content: currentContent }
+                    : msg
+                ));
+              } else if (data.type === 'end') {
+                // Streaming finished
+                break;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              }
+            } catch (parseError) {
+              console.error('Error parsing stream data:', parseError);
+            }
+          }
+        }
+      }
+
+      // Update conversation with final messages
+      const finalMessages = newMessages.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: currentContent || 'No response received' }
+          : msg
+      );
+      setMessages(finalMessages);
+      updateCurrentConversation(finalMessages);
+
     } catch (error) {
       const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: aiMessageId,
         role: 'assistant',
         content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         timestamp: new Date(),
         neonColor: '#ff4444'
       };
-      const finalMessages = [...newMessages, errorMessage];
+      const finalMessages = newMessages.map(msg => 
+        msg.id === aiMessageId ? errorMessage : msg
+      );
       setMessages(finalMessages);
       updateCurrentConversation(finalMessages);
     }

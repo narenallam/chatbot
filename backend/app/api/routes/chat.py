@@ -3,8 +3,10 @@ Chat API routes for the Personal Assistant AI Chatbot
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from fastapi.responses import StreamingResponse
+from typing import List, AsyncGenerator
 import logging
+import json
 
 from app.models.schemas import (
     ChatRequest,
@@ -44,6 +46,50 @@ async def chat_endpoint(request: ChatRequest):
         logger.error(f"Chat endpoint error: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to process chat message: {str(e)}"
+        )
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(request: ChatRequest):
+    """
+    Process a chat message with streaming response
+
+    Args:
+        request: Chat request with message and optional parameters
+
+    Returns:
+        Streaming response with AI reply chunks
+    """
+    try:
+
+        async def generate_stream() -> AsyncGenerator[str, None]:
+            async for chunk in chat_service.chat_stream(
+                message=request.message,
+                conversation_id=request.conversation_id,
+                use_context=request.use_context,
+                temperature=request.temperature,
+            ):
+                yield f"data: {json.dumps(chunk)}\n\n"
+
+            # Send end signal
+            yield f"data: {json.dumps({'type': 'end'})}\n\n"
+
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type",
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Chat stream endpoint error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process streaming chat message: {str(e)}",
         )
 
 

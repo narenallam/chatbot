@@ -40,7 +40,7 @@ class ChatService:
                     temperature=settings.default_temperature,
                 )
                 logger.info(f"Initialized Ollama model: {settings.ollama_model}")
-                
+
             elif settings.llm_provider == "openai" and settings.openai_api_key:
                 self.llm = ChatOpenAI(
                     openai_api_key=settings.openai_api_key,
@@ -48,16 +48,20 @@ class ChatService:
                     temperature=settings.default_temperature,
                 )
                 logger.info(f"Initialized OpenAI model: {settings.openai_model}")
-                
+
             else:
                 # Fallback to Ollama if no provider is configured
-                logger.warning(f"LLM provider '{settings.llm_provider}' not configured properly, falling back to Ollama")
+                logger.warning(
+                    f"LLM provider '{settings.llm_provider}' not configured properly, falling back to Ollama"
+                )
                 self.llm = ChatOllama(
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.default_temperature,
                 )
-                logger.info(f"Fallback: Initialized Ollama model: {settings.ollama_model}")
+                logger.info(
+                    f"Fallback: Initialized Ollama model: {settings.ollama_model}"
+                )
 
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
@@ -136,6 +140,98 @@ class ChatService:
         except Exception as e:
             logger.error(f"Failed to process chat message: {e}")
             raise
+
+    async def chat_stream(
+        self,
+        message: str,
+        conversation_id: Optional[str] = None,
+        use_context: bool = True,
+        temperature: Optional[float] = None,
+    ):
+        """
+        Process a chat message with streaming response
+
+        Args:
+            message: User message
+            conversation_id: Optional conversation ID for history
+            use_context: Whether to use RAG context
+            temperature: Optional temperature override
+
+        Yields:
+            Streaming response chunks
+        """
+        try:
+            # Generate conversation ID if not provided
+            if not conversation_id:
+                conversation_id = str(uuid.uuid4())
+
+            # Get or create conversation memory
+            memory = self._get_conversation_memory(conversation_id)
+
+            # Retrieve relevant context if requested
+            context_docs = []
+            sources = []
+            if use_context:
+                context_docs = await self._retrieve_context(message)
+                sources = [
+                    {
+                        "document_id": doc["document_id"],
+                        "filename": doc["metadata"].get("filename", "Unknown"),
+                        "chunk_text": (
+                            doc["text"][:200] + "..."
+                            if len(doc["text"]) > 200
+                            else doc["text"]
+                        ),
+                        "similarity_score": doc["similarity_score"],
+                    }
+                    for doc in context_docs
+                ]
+
+            # Send sources first
+            if sources:
+                yield {
+                    "type": "sources",
+                    "sources": sources,
+                    "conversation_id": conversation_id,
+                }
+
+            # Build prompt with context
+            prompt = self._build_chat_prompt(message, context_docs, memory)
+
+            # Set temperature if provided
+            if temperature is not None:
+                self.llm.temperature = temperature
+
+            # Generate streaming response
+            full_response = ""
+            async for chunk in self._generate_streaming_response(prompt):
+                if chunk:
+                    full_response += chunk
+                    yield {
+                        "type": "content",
+                        "content": chunk,
+                        "conversation_id": conversation_id,
+                    }
+
+            # Add messages to memory after completion
+            memory.chat_memory.add_user_message(message)
+            memory.chat_memory.add_ai_message(full_response)
+
+            # Send final metadata
+            tokens_used = self._estimate_tokens(message + full_response)
+            yield {
+                "type": "metadata",
+                "tokens_used": tokens_used,
+                "conversation_id": conversation_id,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to process streaming chat message: {e}")
+            yield {
+                "type": "error",
+                "error": str(e),
+                "conversation_id": conversation_id or "unknown",
+            }
 
     async def _retrieve_context(
         self, query: str, n_results: int = 5
@@ -236,6 +332,26 @@ class ChatService:
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             return f"I apologize, but I encountered an error while processing your request: {str(e)}"
+
+    async def _generate_streaming_response(self, prompt: str):
+        """
+        Generate streaming AI response using the configured LLM
+
+        Args:
+            prompt: Formatted prompt string
+
+        Yields:
+            Response chunks
+        """
+        try:
+            messages = [HumanMessage(content=prompt)]
+            async for chunk in self.llm.astream(messages):
+                if hasattr(chunk, "content") and chunk.content:
+                    yield chunk.content
+
+        except Exception as e:
+            logger.error(f"Failed to generate streaming response: {e}")
+            raise
 
     def _get_conversation_memory(
         self, conversation_id: str
@@ -358,7 +474,12 @@ class ChatService:
 
             # Build content generation prompt
             content_prompt = self._build_content_prompt(
-                content_type, prompt, context_docs, tone, length, additional_instructions
+                content_type,
+                prompt,
+                context_docs,
+                tone,
+                length,
+                additional_instructions,
             )
 
             # Generate content
