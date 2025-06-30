@@ -1,5 +1,6 @@
 """
 Vector Database Service using ChromaDB for embeddings and similarity search
+Enhanced with multiprocessing support for parallel embedding generation
 """
 
 import chromadb
@@ -13,6 +14,15 @@ from langchain.schema import Document
 
 from app.core.config import settings
 
+# Import multiprocessing service
+try:
+    from app.services.multiprocessing_service import multiprocessing_service
+
+    MULTIPROCESSING_AVAILABLE = True
+except ImportError:
+    MULTIPROCESSING_AVAILABLE = False
+    multiprocessing_service = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +33,9 @@ class VectorService:
         self.client = None
         self.collection = None
         self.embedding_model = None
+        self.use_multiprocessing = (
+            MULTIPROCESSING_AVAILABLE and settings.enable_parallel_processing
+        )
         self._initialize()
 
     def _initialize(self):
@@ -49,6 +62,9 @@ class VectorService:
             logger.info(
                 f"Vector service initialized with collection: {settings.chroma_collection_name}"
             )
+            logger.info(
+                f"Multiprocessing for embeddings: {'Enabled' if self.use_multiprocessing else 'Disabled'}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize vector service: {e}")
@@ -56,7 +72,7 @@ class VectorService:
 
     async def add_documents(self, documents: List[Document]) -> List[str]:
         """
-        Add document chunks to the vector database
+        Add document chunks to the vector database with parallel embedding generation
 
         Args:
             documents: List of Document objects with page_content and metadata
@@ -78,8 +94,8 @@ class VectorService:
                 chunk_id = metadata.get("chunk_id", f"chunk_{uuid.uuid4()}")
                 chunk_ids.append(chunk_id)
 
-            # Generate embeddings
-            embeddings = self.embedding_model.encode(texts).tolist()
+            # Generate embeddings (with multiprocessing if available and beneficial)
+            embeddings = await self._generate_embeddings(texts)
 
             # Add to collection
             self.collection.add(
@@ -96,6 +112,52 @@ class VectorService:
             logger.error(f"Failed to add documents: {e}")
             raise
 
+    async def _generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings with automatic multiprocessing decision
+
+        Args:
+            texts: List of texts to embed
+
+        Returns:
+            List of embedding vectors
+        """
+        try:
+            # Decision logic for using multiprocessing
+            use_parallel = (
+                self.use_multiprocessing
+                and len(texts) > 20  # Only for larger batches
+                and sum(len(text) for text in texts)
+                > 50000  # Only for substantial text volume
+            )
+
+            if use_parallel:
+                logger.info(
+                    f"Using parallel embedding generation for {len(texts)} texts"
+                )
+                embeddings = await multiprocessing_service.generate_embeddings_parallel(
+                    texts, settings.embedding_model
+                )
+
+                # Fallback to sequential if parallel failed
+                if not embeddings:
+                    logger.warning(
+                        "Parallel embedding failed, falling back to sequential"
+                    )
+                    embeddings = self.embedding_model.encode(texts).tolist()
+            else:
+                logger.info(
+                    f"Using sequential embedding generation for {len(texts)} texts"
+                )
+                embeddings = self.embedding_model.encode(texts).tolist()
+
+            return embeddings
+
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings: {e}")
+            # Always fallback to sequential processing
+            return self.embedding_model.encode(texts).tolist()
+
     async def search(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """
         Search for similar documents
@@ -108,7 +170,7 @@ class VectorService:
             List of search results with metadata
         """
         try:
-            # Generate query embedding
+            # Generate query embedding (single query, always sequential)
             query_embedding = self.embedding_model.encode([query]).tolist()[0]
 
             # Search in collection

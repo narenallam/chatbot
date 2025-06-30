@@ -80,6 +80,15 @@ from app.core.config import settings
 from app.services.vector_service import vector_service
 from app.services.database_service import database_service
 
+# Import multiprocessing service
+try:
+    from app.services.multiprocessing_service import multiprocessing_service
+
+    MULTIPROCESSING_AVAILABLE = True
+except ImportError:
+    MULTIPROCESSING_AVAILABLE = False
+    multiprocessing_service = None
+
 logger = logging.getLogger(__name__)
 
 # Global function to broadcast logs (will be set by main.py)
@@ -389,14 +398,65 @@ class DocumentService:
             raise
 
     async def _extract_from_pdf(self, file_content: bytes) -> str:
-        """Extract text from PDF file with OCR support for scanned pages"""
+        """Extract text from PDF file with OCR support and multiprocessing for large files"""
         try:
+            # Check if multiprocessing should be used
+            use_multiprocessing = (
+                MULTIPROCESSING_AVAILABLE
+                and PYMUPDF_AVAILABLE
+                and settings.enable_parallel_processing
+            )
+
+            if use_multiprocessing:
+                # Estimate PDF size to decide on multiprocessing
+                file_size_mb = len(file_content) / (1024 * 1024)
+
+                if file_size_mb > 5:  # Use multiprocessing for PDFs > 5MB
+                    try:
+                        logger.info(
+                            f"Using multiprocessing for PDF ({file_size_mb:.1f}MB)"
+                        )
+                        await log_to_websocket(
+                            "info",
+                            f"🚀 Using parallel PDF processing ({file_size_mb:.1f}MB)",
+                            {
+                                "file_size_mb": file_size_mb,
+                                "processing_type": "parallel",
+                            },
+                        )
+
+                        extracted_text = (
+                            await multiprocessing_service.process_pdf_parallel(
+                                file_content, "uploaded_pdf"
+                            )
+                        )
+
+                        if extracted_text.strip():
+                            return extracted_text
+                        else:
+                            logger.warning(
+                                "Parallel PDF processing returned empty text, falling back to sequential"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Parallel PDF processing failed: {e}, falling back to sequential"
+                        )
+
+            # Fallback to sequential processing
             text_content = []
 
             # Try PyMuPDF first for better handling
             if PYMUPDF_AVAILABLE:
                 try:
                     doc = fitz.open(stream=file_content, filetype="pdf")
+                    total_pages = len(doc)
+
+                    await log_to_websocket(
+                        "info",
+                        f"🔍 Processing {total_pages} pages with PyMuPDF (sequential)",
+                        {"total_pages": total_pages, "processing_type": "sequential"},
+                    )
+
                     for page_num in range(len(doc)):
                         page = doc.load_page(page_num)
 

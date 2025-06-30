@@ -110,9 +110,32 @@ def text_to_pdf(text_content: str, title: str = "Document") -> bytes:
         for line in lines:
             if line.strip():
                 # Escape HTML characters and handle special characters
+                # Also clean up problematic Unicode characters
                 line = (
-                    line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    line.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace(
+                        "\u202f", " "
+                    )  # Replace narrow no-break space with regular space
+                    .replace(
+                        "\u00a0", " "
+                    )  # Replace non-breaking space with regular space
+                    .replace("\u2019", "'")  # Replace right single quotation mark
+                    .replace("\u2018", "'")  # Replace left single quotation mark
+                    .replace("\u201c", '"')  # Replace left double quotation mark
+                    .replace("\u201d", '"')  # Replace right double quotation mark
+                    .replace("\u2013", "-")  # Replace en dash
+                    .replace("\u2014", "-")  # Replace em dash
                 )
+
+                # Ensure the line can be encoded safely for ReportLab
+                try:
+                    line.encode("latin-1")
+                except UnicodeEncodeError:
+                    # If there are still problematic characters, encode/decode to clean them
+                    line = line.encode("ascii", errors="ignore").decode("ascii")
+
                 story.append(Paragraph(line, normal_style))
             else:
                 story.append(Spacer(1, 6))
@@ -536,10 +559,15 @@ async def get_original_document(document_id: str):
         with open(file_path, "rb") as f:
             content = f.read()
 
+        # Encode filename properly for HTTP headers
+        safe_filename = filename.encode("ascii", "ignore").decode("ascii")
+        if not safe_filename:
+            safe_filename = "document"
+
         return StreamingResponse(
             io.BytesIO(content),
             media_type=content_type,
-            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+            headers={"Content-Disposition": f'inline; filename="{safe_filename}"'},
         )
 
     except HTTPException:
@@ -576,10 +604,15 @@ async def download_document(document_id: str):
         with open(file_path, "rb") as f:
             content = f.read()
 
+        # Encode filename properly for HTTP headers
+        safe_filename = filename.encode("ascii", "ignore").decode("ascii")
+        if not safe_filename:
+            safe_filename = "document"
+
         return StreamingResponse(
             io.BytesIO(content),
             media_type=content_type,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
         )
 
     except HTTPException:
@@ -607,8 +640,11 @@ async def download_document_as_pdf(document_id: str):
         filename = metadata.get("filename", "unknown")
         file_path = metadata.get("file_path")
 
-        # Generate PDF filename
-        pdf_filename = f"{Path(filename).stem}.pdf"
+        # Generate PDF filename with safe encoding
+        safe_filename_stem = filename.encode("ascii", "ignore").decode("ascii")
+        if not safe_filename_stem:
+            safe_filename_stem = "document"
+        pdf_filename = f"{Path(safe_filename_stem).stem}.pdf"
 
         # If no file path, try to get content from chunks
         if not file_path or not os.path.exists(file_path):
@@ -641,10 +677,17 @@ async def download_document_as_pdf(document_id: str):
             with open(file_path, "rb") as f:
                 pdf_content = f.read()
 
+            # Encode filename properly for HTTP headers
+            safe_filename = filename.encode("ascii", "ignore").decode("ascii")
+            if not safe_filename:
+                safe_filename = "document.pdf"
+
             return StreamingResponse(
                 io.BytesIO(pdf_content),
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                headers={
+                    "Content-Disposition": f'attachment; filename="{safe_filename}"'
+                },
             )
 
         # Convert non-PDF files to PDF
