@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FileText, Hash, Calendar, HardDrive, FileImage, FileSpreadsheet, Presentation, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { FileText, Hash, Calendar, HardDrive, FileImage, FileSpreadsheet, Presentation, CheckCircle, AlertCircle, Info, Eye, Download, ExternalLink, Loader } from 'lucide-react';
 
 interface DocumentDetailsProps {
   document: {
@@ -39,9 +39,9 @@ const Modal = styled.div`
   border: 1px solid #333;
   border-radius: 12px;
   padding: 24px;
-  max-width: 500px;
-  width: 90%;
-  max-height: 80vh;
+  max-width: 800px;
+  width: 95%;
+  max-height: 95vh;
   overflow-y: auto;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 `;
@@ -185,6 +185,124 @@ const ErrorMessage = styled.div`
   gap: 8px;
 `;
 
+const PreviewSection = styled.div`
+  margin-top: 16px;
+`;
+
+const PreviewHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+`;
+
+const PreviewTitle = styled.div`
+  color: #888;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const PreviewActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const PreviewButton = styled.button`
+  background: none;
+  border: 1px solid #444;
+  color: #888;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #00ffff;
+    color: #00ffff;
+    background: rgba(0, 255, 255, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    &:hover {
+      border-color: #444;
+      color: #888;
+      background: none;
+    }
+  }
+`;
+
+const PreviewContainer = styled.div`
+  width: 100%;
+  height: 400px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #0f0f0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+`;
+
+const PreviewImage = styled.img`
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+`;
+
+const PreviewPDF = styled.iframe`
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
+  border-radius: 6px;
+`;
+
+const PreviewError = styled.div`
+  color: #ff6666;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+`;
+
+const PreviewLoading = styled.div`
+  color: #888;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+`;
+
+const PreviewPlaceholder = styled.div`
+  color: #666;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+`;
+
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -217,6 +335,11 @@ const getFileTypeIcon = (fileName: string) => {
     case 'jpg':
     case 'jpeg':
     case 'heic':
+    case 'bmp':
+    case 'gif':
+    case 'tiff':
+    case 'webp':
+    case 'svg':
       return <FileImage size={16} />;
     default:
       return <FileText size={16} />;
@@ -234,11 +357,146 @@ const getFileTypeName = (fileName: string) => {
     case 'jpg':
     case 'jpeg': return 'JPEG Image';
     case 'heic': return 'HEIC Image';
+    case 'bmp': return 'BMP Image';
+    case 'gif': return 'GIF Image';
+    case 'tiff': return 'TIFF Image';
+    case 'webp': return 'WebP Image';
+    case 'svg': return 'SVG Image';
     default: return 'Document';
   }
 };
 
 export const DocumentDetails: React.FC<DocumentDetailsProps> = ({ document, onClose }) => {
+  const isImageFile = (filename: string): boolean => {
+    const ext = filename.toLowerCase().split('.').pop();
+    return ['png', 'jpg', 'jpeg', 'heic', 'bmp', 'gif', 'tiff', 'webp', 'svg'].includes(ext || '');
+  };
+
+  const isPDFFile = (filename: string): boolean => {
+    const ext = filename.toLowerCase().split('.').pop();
+    return ext === 'pdf';
+  };
+
+  const canPreview = (filename: string): boolean => {
+    return isImageFile(filename) || isPDFFile(filename);
+  };
+
+  const [showPreview, setShowPreview] = useState(canPreview(document.name));
+  const [previewState, setPreviewState] = useState<{ loading: boolean; error: string | null; url: string | null }>({
+    loading: false,
+    error: null,
+    url: null
+  });
+
+  const loadPreview = async () => {
+    if (document.status !== 'ready') return;
+    
+    setPreviewState({ loading: true, error: null, url: null });
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/documents/original/${document.id}`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setPreviewState({ loading: false, error: null, url });
+      } else {
+        throw new Error(`Failed to load preview: ${response.status}`);
+      }
+    } catch (error) {
+      setPreviewState({ loading: false, error: (error as Error).message || 'Failed to load preview', url: null });
+    }
+  };
+
+  // Auto-load preview for previewable files when component mounts
+  useEffect(() => {
+    if (showPreview && document.status === 'ready' && canPreview(document.name)) {
+      loadPreview();
+    }
+  }, [document.id, document.status, showPreview]);
+
+  const togglePreview = () => {
+    if (!showPreview) {
+      setShowPreview(true);
+      loadPreview();
+    } else {
+      setShowPreview(false);
+      if (previewState.url) {
+        URL.revokeObjectURL(previewState.url);
+      }
+      setPreviewState({ loading: false, error: null, url: null });
+    }
+  };
+
+  const downloadDocument = async () => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/documents/original/${document.id}`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = globalThis.document.createElement('a');
+        a.href = url;
+        a.download = document.name;
+        globalThis.document.body.appendChild(a);
+        a.click();
+        globalThis.document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        throw new Error(`Failed to download: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
+  const openInNewTab = () => {
+    const previewUrl = `http://localhost:8000/api/documents/original/${document.id}`;
+    window.open(previewUrl, '_blank');
+  };
+
+  const renderPreview = () => {
+    if (previewState.loading) {
+      return (
+        <PreviewLoading>
+          <Loader size={24} />
+          Loading preview...
+        </PreviewLoading>
+      );
+    }
+
+    if (previewState.error) {
+      return (
+        <PreviewError>
+          <AlertCircle size={24} />
+          {previewState.error}
+        </PreviewError>
+      );
+    }
+
+    if (previewState.url) {
+      if (isImageFile(document.name)) {
+        return <PreviewImage src={previewState.url} alt={document.name} />;
+      } else if (isPDFFile(document.name)) {
+        return <PreviewPDF src={previewState.url} title={document.name} />;
+      }
+    }
+
+    return (
+      <PreviewPlaceholder>
+        <FileText size={24} />
+        Preview not available
+      </PreviewPlaceholder>
+    );
+  };
+
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (previewState.url) {
+        URL.revokeObjectURL(previewState.url);
+      }
+    };
+  }, [previewState.url]);
+
   return (
     <Overlay onClick={onClose}>
       <Modal onClick={(e) => e.stopPropagation()}>
@@ -284,6 +542,40 @@ export const DocumentDetails: React.FC<DocumentDetailsProps> = ({ document, onCl
               </InfoItem>
             </InfoGrid>
           </Section>
+          
+          {/* File Preview Section */}
+          {document.status === 'ready' && (
+            <PreviewSection>
+              <PreviewHeader>
+                <PreviewTitle>
+                  <Eye size={14} />
+                  File Preview
+                </PreviewTitle>
+                <PreviewActions>
+                  {canPreview(document.name) && (
+                    <PreviewButton onClick={togglePreview}>
+                      <Eye size={12} />
+                      {showPreview ? 'Hide Preview' : 'Show Preview'}
+                    </PreviewButton>
+                  )}
+                  <PreviewButton onClick={downloadDocument}>
+                    <Download size={12} />
+                    Download
+                  </PreviewButton>
+                  <PreviewButton onClick={openInNewTab}>
+                    <ExternalLink size={12} />
+                    Open
+                  </PreviewButton>
+                </PreviewActions>
+              </PreviewHeader>
+              
+              {showPreview && (
+                <PreviewContainer>
+                  {renderPreview()}
+                </PreviewContainer>
+              )}
+            </PreviewSection>
+          )}
           
           {document.newFileName && (
             <Section>

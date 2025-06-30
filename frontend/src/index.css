@@ -12,8 +12,9 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: 'Noto Sans Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace !important;
+  font-weight: 300 !important;
 }
 
 * {

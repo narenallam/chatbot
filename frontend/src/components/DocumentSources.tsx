@@ -79,7 +79,8 @@ const SourceFilename = styled.button`
 const SourceScore = styled.span`
   color: #666;
   font-size: 0.7rem;
-  font-family: monospace;
+  font-family: "Noto Sans Mono", monospace !important;
+  font-weight: 300 !important;
 `;
 
 const SourcePreview = styled.div`

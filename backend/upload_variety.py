@@ -34,24 +34,9 @@ async def upload_variety_files():
 
     # Files to upload (supported types with OCR focus)
     files_to_upload = [
-        # Document files
-        "All MCA docs.docx",  # Word document
-        "TrialBal.xlsx",  # Excel spreadsheet
-        "QM Competitive Programming.pptx",  # PowerPoint
-        "Blockchain Portfolio.docx",  # Word document
-        "PL of Rossum Products.xlsx",  # Excel
-        # PDF files (some may be scanned)
-        "small.pdf",  # Small PDF
-        "medmium.pdf",  # Medium PDF
-        "large_scanned_file.pdf",  # Large PDF (likely scanned)
-        "ComputerLabPrograms.pdf",  # PDF
-        "Directory of Officers.pdf",  # PDF
-        # Image files for OCR testing
-        "IMG_7BE1ACB09422-1.jpeg",  # Image
-        "Screenshot 2025-06-27 at 7.55.12 am.png",  # Screenshot
-        "Screenshot 2025-06-27 at 7.56.00 am.png",  # Screenshot
-        # Legacy formats (will be skipped)
-        "B+TREE project slides.ppt",  # PowerPoint (legacy)
+        f.name
+        for f in test_data_dir.iterdir()
+        if f.is_file() and not f.name.startswith(".")
     ]
 
     logger.info("🚀 Starting enhanced document processing demonstration...")

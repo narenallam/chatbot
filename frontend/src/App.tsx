@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { Terminal } from 'lucide-react';
+import { Terminal, MessageSquare } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { FileUploadPanel } from './components/FileUploadPanel';
 import { ChatPanel } from './components/ChatPanel';
@@ -124,43 +124,15 @@ const Title = styled.h1`
   margin: 0;
   font-size: 1.8rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #FF6EC7;
   font-family: 'Moirai One', serif;
   letter-spacing: 1px;
 `;
 
-const ClearChatButton = styled.button`
-  background: linear-gradient(135deg, rgba(255, 20, 147, 0.2) 0%, rgba(255, 0, 128, 0.2) 100%);
-  border: 1px solid #ff1493;
-  color: #ff69b4;
-  padding: 8px 12px;
-  border-radius: 25px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  transition: all 0.2s ease;
-  box-shadow: none;
-  
-  &:hover:not(:disabled) {
-    color: #ffffff;
-    border-color: #ff69b4;
-    background: linear-gradient(135deg, rgba(255, 20, 147, 0.4) 0%, rgba(255, 0, 128, 0.4) 100%);
-    box-shadow: none;
-  }
-  
-  &:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-    box-shadow: none;
-  }
-`;
-
 const ConsoleToggle = styled.button`
-  background: linear-gradient(135deg, rgba(0, 255, 255, 0.1) 0%, rgba(0, 200, 255, 0.1) 100%);
-  border: 1px solid #00ffff;
-  color: #00ffff;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.07) 0%, rgba(0, 200, 255, 0.07) 100%);
+  border: 1px solid #00cccc;
+  color: #00cccc;
   padding: 8px 12px;
   border-radius: 25px;
   cursor: pointer;
@@ -173,16 +145,40 @@ const ConsoleToggle = styled.button`
   
   &:hover {
     color: #ffffff;
-    border-color: #00ffff;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(0, 200, 255, 0.2) 100%);
+    border-color: #00cccc;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.14) 0%, rgba(0, 200, 255, 0.14) 100%);
     box-shadow: none;
   }
   
   &.active {
     color: #ffffff;
-    border-color: #00ffff;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.3) 0%, rgba(0, 200, 255, 0.3) 100%);
+    border-color: #00cccc;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.21) 0%, rgba(0, 200, 255, 0.21) 100%);
     box-shadow: none;
+  }
+`;
+
+const NewChatButton = styled.button`
+  background: linear-gradient(135deg, rgba(57, 255, 20, 0.07) 0%, rgba(57, 255, 20, 0.07) 100%);
+  border: 1px solid #28b80f;
+  color: #28b80f;
+  padding: 8px 14px;
+  border-radius: 25px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: none;
+  height: 36px;
+  margin-left: 8px;
+  &:hover {
+    color: #181818;
+    background: #28b80f14;
+    border-color: #28b80f;
+    box-shadow: 0 0 8px #28b80f33;
   }
 `;
 
@@ -267,6 +263,7 @@ function App() {
 
   // Persistent storage functions
   const saveToStorage = () => {
+    // Save ALL conversations, including empty ones
     localStorage.setItem('ai-mate-conversations', JSON.stringify(conversations));
     localStorage.setItem('ai-mate-documents', JSON.stringify(uploadedDocuments));
     localStorage.setItem('ai-mate-current-conversation', currentConversationId || '');
@@ -274,23 +271,29 @@ function App() {
 
   const loadFromStorage = () => {
     try {
-      // Normal loading from localStorage without system reset check
+      // Load conversations but always start with empty chat area on refresh
       const savedConversations = localStorage.getItem('ai-mate-conversations');
       const savedDocuments = localStorage.getItem('ai-mate-documents');
-      const savedCurrentConversation = localStorage.getItem('ai-mate-current-conversation');
 
       if (savedConversations) {
-        const parsedConversations = JSON.parse(savedConversations).map((conv: any) => ({
-          ...conv,
-          createdAt: new Date(conv.createdAt),
-          updatedAt: new Date(conv.updatedAt),
-          messages: conv.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }))
-        }));
+        const parsedConversations = JSON.parse(savedConversations)
+          .map((conv: any) => ({
+            ...conv,
+            createdAt: new Date(conv.createdAt),
+            updatedAt: new Date(conv.updatedAt),
+            messages: conv.messages.map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp)
+            }))
+          }));
         setConversations(parsedConversations);
       }
+
+      // Always start with empty chat area on page load/refresh
+      setCurrentConversationId(null);
+      setMessages([]);
+      // Remove current conversation from localStorage so refresh always shows empty chat
+      localStorage.removeItem('ai-mate-current-conversation');
 
       if (savedDocuments) {
         const parsedDocuments = JSON.parse(savedDocuments).map((doc: any) => ({
@@ -298,19 +301,6 @@ function App() {
           uploadedAt: new Date(doc.uploadedAt)
         }));
         setUploadedDocuments(parsedDocuments);
-      }
-
-      if (savedCurrentConversation) {
-        setCurrentConversationId(savedCurrentConversation);
-        // Find the conversation in the already loaded conversations
-        const currentConv = JSON.parse(savedConversations || '[]').find((c: any) => c.id === savedCurrentConversation);
-        if (currentConv) {
-          const parsedMessages = currentConv.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }));
-          setMessages(parsedMessages);
-        }
       }
     } catch (error) {
       console.error('Error loading from storage:', error);
@@ -326,8 +316,12 @@ function App() {
   };
 
   const createNewConversation = () => {
+    // Clear current messages first to avoid any conflicts
+    setMessages([]);
+    setCurrentConversationId(null);
+    
     const newConversation: Conversation = {
-      id: Date.now().toString(),
+      id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // More unique ID
       title: 'New Conversation',
       messages: [],
       createdAt: new Date(),
@@ -335,27 +329,14 @@ function App() {
     };
     setConversations(prev => [newConversation, ...prev]);
     setCurrentConversationId(newConversation.id);
-    setMessages([]);
     return newConversation;
   };
 
   const updateCurrentConversation = (newMessages: ChatMessage[]) => {
-    let conversationId = currentConversationId;
+    const conversationId = currentConversationId;
     
-    // Create conversation if it doesn't exist, but don't reset messages
-    if (!conversationId) {
-      const newConversation: Conversation = {
-        id: Date.now().toString(),
-        title: 'New Conversation',
-        messages: newMessages, // Use the provided messages instead of empty array
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      setConversations(prev => [newConversation, ...prev]);
-      setCurrentConversationId(newConversation.id);
-      conversationId = newConversation.id;
-    } else {
-      // Update existing conversation
+    // Only update if conversation already exists - never create here
+    if (conversationId) {
       setConversations(prev => prev.map(conv => {
         if (conv.id === conversationId) {
           const title = newMessages.length > 0 ? 
@@ -371,6 +352,7 @@ function App() {
         return conv;
       }));
     }
+    // If no conversation exists, do nothing - let sendMessage handle creation
   };
 
   const loadConversation = (conversationId: string) => {
@@ -476,15 +458,19 @@ function App() {
     // Ensure we have a conversation ID before sending message
     let conversationId = currentConversationId;
     if (!conversationId) {
+      // Create new conversation only once here
+      const timestamp = Date.now();
       const newConversation: Conversation = {
-        id: Date.now().toString(),
+        id: `conv_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
         title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
         messages: [],
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      setConversations(prev => [newConversation, ...prev]);
+      
+      // Set conversation immediately to prevent multiple creations
       setCurrentConversationId(newConversation.id);
+      setConversations(prev => [newConversation, ...prev]);
       conversationId = newConversation.id;
     }
 
@@ -614,9 +600,44 @@ function App() {
     }
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    setCurrentConversationId(null);
+  const clearChat = async () => {
+    try {
+      // Clear frontend state and localStorage first
+      setMessages([]);
+      setCurrentConversationId(null);
+      setConversations([]);
+      localStorage.removeItem('ai-mate-conversations');
+      localStorage.removeItem('ai-mate-current-conversation');
+      
+      // Also clear backend conversations
+      await fetch(`${BACKEND_URL}/api/admin/reset-database`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }).catch(err => {
+        console.warn('Failed to reset backend database:', err);
+        // Continue even if backend reset fails
+      });
+      
+      // Clear documents from state
+      setUploadedDocuments([]);
+      localStorage.removeItem('ai-mate-documents');
+      
+      // Refresh system status after clearing
+      setTimeout(() => {
+        checkSystemStatus(false);
+        loadDocumentsFromBackend();
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error clearing chat:', error);
+      // Still clear frontend even if backend fails
+      setMessages([]);
+      setCurrentConversationId(null);
+      setConversations([]);
+      setUploadedDocuments([]);
+    }
   };
 
   const handleFileUpload = async (files: File[]): Promise<FileUploadResult[]> => {
@@ -758,12 +779,18 @@ function App() {
     return () => clearInterval(interval);
   }, []); // Empty dependency array to prevent infinite loop
 
+  // No automatic conversation creation - user must click "New Chat"
+
   // Save data whenever conversations or documents change (but not during streaming)
   useEffect(() => {
     if (!isStreamingResponse && (conversations.length > 0 || uploadedDocuments.length > 0)) {
       saveToStorage();
     }
   }, [conversations, uploadedDocuments, currentConversationId, isStreamingResponse]); // Remove saveToStorage from dependencies
+
+  useEffect(() => {
+    loadDocumentsFromBackend();
+  }, []);
 
   return (
     <AppContainer>
@@ -772,9 +799,10 @@ function App() {
       <Header>
         <Title>AI MATE</Title>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ClearChatButton onClick={clearChat} disabled={messages.length === 0}>
-            Clear Chat
-          </ClearChatButton>
+          <NewChatButton onClick={createNewConversation} title="New chat">
+            <MessageSquare size={16} color="#39FF14" />
+            New chat
+          </NewChatButton>
           <ConsoleToggle 
             className={isConsoleVisible ? 'active' : ''} 
             onClick={() => setIsConsoleVisible(!isConsoleVisible)}
@@ -816,7 +844,7 @@ function App() {
               conversations={conversations}
               currentConversationId={currentConversationId}
               onLoadConversation={loadConversation}
-              onNewConversation={createNewConversation}
+              onNewConversation={() => {}}
               onClearChat={clearChat}
             />
           </PanelContainer>

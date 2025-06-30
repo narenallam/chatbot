@@ -209,27 +209,27 @@ const StatValue = styled.span`
 `;
 
 const NewConversationButton = styled.button`
-  background: linear-gradient(135deg, rgba(127, 255, 0, 0.1) 0%, rgba(127, 255, 0, 0.1) 100%);
-  border: 1px solid #7FFF00;
-  color: #7FFF00;
-  padding: 8.8px 12px;
-  border-radius: 25px;
+  background: transparent;
+  border: 1.5px solid #39FF14;
+  color: #39FF14;
+  padding: 8px 18px 8px 14px;
+  border-radius: 18px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  transition: all 0.2s ease;
-  box-shadow: none;
-  width: 45%;
-  justify-content: center;
-  margin: 0 auto;
-  
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 18px auto 10px auto;
+  transition: all 0.18s;
+  box-shadow: 0 0 8px #39FF1430;
+  outline: none;
+  width: fit-content;
   &:hover {
-    color: #ffffff;
-    border-color: #7FFF00;
-    background: linear-gradient(135deg, rgba(127, 255, 0, 0.2) 0%, rgba(127, 255, 0, 0.2) 100%);
-    box-shadow: none;
+    background: #39FF1420;
+    color: #181818;
+    border-color: #39FF14;
+    box-shadow: 0 0 12px #39FF1440;
   }
 `;
 
@@ -333,25 +333,11 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
 
   return (
     <PanelContainer>
-      <Header>
-        <Title>
-          <MessageCircle size={16} />
-          Conversations
-        </Title>
-      </Header>
-      
-      <Controls>
-        <NewConversationButton onClick={onNewConversation}>
-          <Plus size={12} />
-          New Chat
-        </NewConversationButton>
-      </Controls>
-
-      <HistoryContainer>
+      <HistoryContainer style={{paddingTop: 0}}>
         {groupedConversations.length === 0 ? (
           <EmptyState>
             <EmptyIcon />
-            <EmptyText>No conversations yet</EmptyText>
+            <EmptyText>No chats yet</EmptyText>
           </EmptyState>
         ) : (
           groupedConversations.map(([date, convs], groupIndex) => (
@@ -381,19 +367,6 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
           ))
         )}
       </HistoryContainer>
-
-      {totalConversations > 0 && (
-        <Stats>
-          <StatItem>
-            <StatLabel>Conversations:</StatLabel>
-            <StatValue>{totalConversations}</StatValue>
-          </StatItem>
-          <StatItem>
-            <StatLabel>Total Messages:</StatLabel>
-            <StatValue>{totalMessages}</StatValue>
-          </StatItem>
-        </Stats>
-      )}
     </PanelContainer>
   );
 }; 

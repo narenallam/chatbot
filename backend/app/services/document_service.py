@@ -190,6 +190,33 @@ class DocumentService:
             ".jpeg": "image/jpeg",
             ".heic": "image/heic",
             ".heif": "image/heif",
+            ".md": "text/markdown",
+            ".txt": "text/plain",
+            ".c": "text/x-c",
+            ".cpp": "text/x-c++",
+            ".java": "text/x-java",
+            ".cs": "text/x-csharp",
+            ".js": "application/javascript",
+            ".ts": "application/typescript",
+            ".go": "text/x-go",
+            ".rs": "text/x-rustsrc",
+            ".php": "text/x-php",
+            ".pl": "text/x-perl",
+            ".rb": "text/x-ruby",
+            ".py": "text/x-python",
+            ".swift": "text/x-swift",
+            ".kt": "text/x-kotlin",
+            ".scala": "text/x-scala",
+            ".sh": "application/x-sh",
+            ".bat": "application/x-bat",
+            ".ps1": "application/x-powershell",
+            ".html": "text/html",
+            ".css": "text/css",
+            ".json": "application/json",
+            ".xml": "application/xml",
+            ".yaml": "application/x-yaml",
+            ".yml": "application/x-yaml",
+            ".toml": "application/x-toml",
         }
         return content_types.get(extension, "application/octet-stream")
 
@@ -205,6 +232,33 @@ class DocumentService:
             ".jpeg",
             ".heic",
             ".heif",
+            ".md",
+            ".txt",
+            ".c",
+            ".cpp",
+            ".java",
+            ".cs",
+            ".js",
+            ".ts",
+            ".go",
+            ".rs",
+            ".php",
+            ".pl",
+            ".rb",
+            ".py",
+            ".swift",
+            ".kt",
+            ".scala",
+            ".sh",
+            ".bat",
+            ".ps1",
+            ".html",
+            ".css",
+            ".json",
+            ".xml",
+            ".yaml",
+            ".yml",
+            ".toml",
         }
         extension = Path(filename).suffix.lower()
         return extension in supported_extensions
@@ -368,14 +422,6 @@ class DocumentService:
     ) -> str:
         """
         Extract text from file based on type with OCR support
-
-        Args:
-            file_content: File content as bytes
-            filename: Original filename
-            content_type: MIME content type
-
-        Returns:
-            Extracted text content
         """
         file_extension = Path(filename).suffix.lower()
 
@@ -388,8 +434,77 @@ class DocumentService:
                 return await self._extract_from_pptx(file_content)
             elif file_extension == ".xlsx":
                 return await self._extract_from_excel(file_content)
-            elif file_extension in [".png", ".jpg", ".jpeg", ".heic", ".heif"]:
+            elif file_extension in [".png", ".jpg", ".jpeg"]:
                 return await self._extract_from_image(file_content, filename)
+            elif file_extension in [".heic", ".heif"]:
+                # Convert HEIC/HEIF to PNG using pillow-heif, then OCR
+                if not HEIF_AVAILABLE:
+                    raise ImportError(
+                        "pillow-heif is not available for HEIC/HEIF conversion"
+                    )
+                from PIL import Image
+                import io
+                import pillow_heif
+
+                heif_file = pillow_heif.read_heif(file_content)
+                image = Image.frombytes(
+                    heif_file.mode, heif_file.size, heif_file.data, "raw"
+                )
+                # Convert to PNG in memory
+                png_bytes_io = io.BytesIO()
+                image.save(png_bytes_io, format="PNG")
+                png_bytes = png_bytes_io.getvalue()
+
+                # Save the PNG file to hashed_files and original_files
+                file_hash = self._calculate_file_hash(file_content)
+                png_filename = f"{file_hash}.png"
+                hashed_png_path = Path("data/hashed_files") / png_filename
+                original_png_path = Path("data/original_files") / png_filename
+                async with aiofiles.open(hashed_png_path, "wb") as f:
+                    await f.write(png_bytes)
+                async with aiofiles.open(original_png_path, "wb") as f:
+                    await f.write(png_bytes)
+
+                # Add PNG filename to metadata for preview
+                if not hasattr(self, "_extra_metadata"):
+                    self._extra_metadata = {}
+                self._extra_metadata["converted_png"] = png_filename
+
+                return await self._extract_from_image(png_bytes, png_filename)
+            elif file_extension in [
+                ".md",
+                ".txt",
+                ".c",
+                ".cpp",
+                ".java",
+                ".cs",
+                ".js",
+                ".ts",
+                ".go",
+                ".rs",
+                ".php",
+                ".pl",
+                ".rb",
+                ".py",
+                ".swift",
+                ".kt",
+                ".scala",
+                ".sh",
+                ".bat",
+                ".ps1",
+                ".html",
+                ".css",
+                ".json",
+                ".xml",
+                ".yaml",
+                ".yml",
+                ".toml",
+            ]:
+                # Treat as plain text/code/markdown
+                try:
+                    return file_content.decode("utf-8")
+                except UnicodeDecodeError:
+                    return file_content.decode("latin-1")
             else:
                 raise ValueError(f"Unsupported file type: {file_extension}")
 

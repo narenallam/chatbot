@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import { SystemStatus } from '../App';
+import { Check, X } from 'lucide-react';
 
 interface StatusPanelProps {
   status: SystemStatus;
@@ -71,7 +72,11 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({ status }) => {
         <StatusDot status={status.backend} />
         <StatusLabel>Backend</StatusLabel>
         <StatusValue>
-          {status.backend === 'online' ? 'Online' : 'Offline'}
+          {status.backend === 'online' ? (
+            <Check size={14} color="#00ff00" style={{verticalAlign: 'middle'}} />
+          ) : (
+            <X size={14} color="#ff4444" style={{verticalAlign: 'middle'}} />
+          )}
         </StatusValue>
       </StatusItem>
       
@@ -79,31 +84,12 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({ status }) => {
         <StatusDot status={status.aiModels} />
         <StatusLabel>AI Models</StatusLabel>
         <StatusValue>
-          {status.aiModels === 'online' ? 'Ready' : 'Offline'}
-        </StatusValue>
-      </StatusItem>
-      
-      <StatusItem>
-        <StatusDot status={status.isProcessing ? 'online' : 'offline'} />
-        <StatusLabel>Processing</StatusLabel>
-        <EnhancedStatusValue>
-          <span>
-            {status.cpuCores} Cores
-            {status.isProcessing && status.cpuUsage ? ` (${status.cpuUsage}%)` : ''}
-          </span>
-          {status.isProcessing && (
-            <StatusSubtext>Enhanced OCR Active</StatusSubtext>
+          {status.aiModels === 'online' ? (
+            <Check size={14} color="#00ff00" style={{verticalAlign: 'middle'}} />
+          ) : (
+            <X size={14} color="#ff4444" style={{verticalAlign: 'middle'}} />
           )}
-        </EnhancedStatusValue>
-      </StatusItem>
-      
-      <StatusItem>
-        <StatusDot status={status.documents > 0 ? 'online' : 'offline'} />
-        <StatusLabel>Documents</StatusLabel>
-        <EnhancedStatusValue>
-          <span>{status.documents}</span>
-          <StatusSubtext>Enhanced Service</StatusSubtext>
-        </EnhancedStatusValue>
+        </StatusValue>
       </StatusItem>
     </PanelContainer>
   );

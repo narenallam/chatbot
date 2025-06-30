@@ -270,8 +270,8 @@ const MarkdownContent = styled.div`
     color: #e8e8e8;
     padding: 4px 8px;
     border-radius: 6px;
-    font-family: 'Noto Sans Mono', 'Fira Code', 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
-    font-weight: 500;
+    font-family: 'Noto Sans Mono', 'Fira Code', 'JetBrains Mono', 'Monaco', 'Consolas', monospace !important;
+    font-weight: 300 !important;
     font-size: 0.9em;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);

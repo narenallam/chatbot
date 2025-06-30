@@ -32,45 +32,19 @@ async def upload_variety_files():
     # Test data directory
     test_data_dir = Path(__file__).parent.parent / "test_data"
 
-    # Files to upload (various types)
-    files_to_upload = [
-        "narensniff.c",  # C code file
-        "IMG_CAF37BDF9464-1.jpeg",  # Image file
-        "All MCA docs.docx",  # Word document
-        "TrialBal.xlsx",  # Excel spreadsheet
-        "QM Competitive Programming.pptx",  # PowerPoint
-        "README.md",  # Markdown file
-        "small.pdf",  # Small PDF
-        "medmium.pdf",  # Medium PDF
-        "large_scanned_file.pdf",  # Large PDF
-        "B+TREE project slides.ppt",  # PowerPoint
-        "Blockchain Portfolio.docx",  # Word document
-        "ComputerLabPrograms.pdf",  # PDF
-        "Directory of Officers.pdf",  # PDF
-        "Financials Rossum AY 2019-20.xlsx",  # Excel
-        "IMG_7BE1ACB09422-1.jpeg",  # Image
-        "NMM socket Task.doc",  # Word document
-        "nping.c",  # C code
-        "ntracer_icmp.c",  # C code
-        "Screenshot 2025-06-27 at 7.55.12 am.png",  # Screenshot
-        "Screenshot 2025-06-27 at 7.56.00 am.png",  # Screenshot
-        "setmtu.c",  # C code
-        "PL of Rossum Products.xlsx",  # Excel
-    ]
-
     logger.info("🚀 Starting variety file upload demonstration...")
     logger.info(f"📁 Test data directory: {test_data_dir}")
-    logger.info(f"📊 Files to upload: {len(files_to_upload)}")
+
+    all_files = [
+        f for f in test_data_dir.iterdir() if f.is_file() and f.name != ".DS_Store"
+    ]
+    logger.info(f"📊 Files to upload: {len(all_files)}")
 
     successful_uploads = 0
     failed_uploads = 0
 
-    for filename in files_to_upload:
-        file_path = test_data_dir / filename
-
-        if not file_path.exists():
-            logger.warning(f"⚠️  File not found: {filename}")
-            continue
+    for file_path in all_files:
+        filename = file_path.name
 
         try:
             logger.info(
