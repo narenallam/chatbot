@@ -1,0 +1,12 @@
+This is a test document for verifying the document storage system. 
+
+It contains some sample text that should be processed by the OCR and text extraction system.
+
+Features to test:
+- Original filename preservation: Test_Document_Sample.txt
+- File hash calculation
+- Duplicate detection
+- Storage in both hashed_files and original_files directories
+- Proper database metadata storage
+
+This test will help us verify that document names are no longer showing as 'Unknown Document'.

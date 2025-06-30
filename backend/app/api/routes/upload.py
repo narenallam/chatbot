@@ -12,8 +12,6 @@ import uuid
 import base64
 
 from app.services.document_service import document_service
-from app.services.ocr_document_service import enhanced_document_service
-from app.services.parallel_pdf_service import parallel_pdf_processor
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +37,8 @@ upload_status_store = {}
 batch_status_store: Dict[str, Dict[str, Any]] = {}
 
 
-@router.post("/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
+@router.post("/documents")
+async def upload_documents(files: List[UploadFile] = File(...)):
     """
     Unified upload endpoint - intelligently handles single/multiple files with optimal processing
 
@@ -213,21 +211,12 @@ async def upload_files(files: List[UploadFile] = File(...)):
                     },
                 )
 
-                if service_choice == "enhanced_ocr":
-                    result = (
-                        await enhanced_document_service.process_large_uploaded_file(
-                            file_content=file_content,
-                            filename=file.filename,
-                            content_type=file.content_type
-                            or "application/octet-stream",
-                        )
-                    )
-                else:
-                    result = await document_service.process_uploaded_file(
-                        file_content=file_content,
-                        filename=file.filename,
-                        content_type=file.content_type or "application/octet-stream",
-                    )
+                # Use the enhanced document service for all files
+                result = await document_service.process_uploaded_file(
+                    file_content=file_content,
+                    filename=file.filename,
+                    content_type=file.content_type or "application/octet-stream",
+                )
 
                 # Add processing metadata
                 result["upload_id"] = upload_id
@@ -377,7 +366,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
 
 
-@router.get("/upload/status/{upload_id}")
+@router.get("/status/{upload_id}")
 async def get_upload_status(upload_id: str):
     """
     Get status of a specific upload
@@ -403,7 +392,7 @@ async def get_upload_status(upload_id: str):
         )
 
 
-@router.post("/upload/url")
+@router.post("/url")
 async def upload_url(url: str):
     """
     Upload content from URL
@@ -454,102 +443,11 @@ async def upload_url(url: str):
         raise HTTPException(status_code=500, detail=f"Failed to upload URL: {str(e)}")
 
 
-@router.get("/documents")
-async def list_documents():
-    """
-    List all uploaded documents
-
-    Returns:
-        List of document metadata
-    """
-    try:
-        documents = await document_service.list_documents()
-
-        # Add summary statistics
-        total_chunks = sum(doc.get("chunk_count", 0) for doc in documents)
-        total_size = sum(
-            doc.get("metadata", {}).get("file_size", 0) for doc in documents
-        )
-
-        return {
-            "documents": documents,
-            "total": len(documents),
-            "summary": {
-                "total_documents": len(documents),
-                "total_chunks": total_chunks,
-                "total_size_bytes": total_size,
-                "total_size_mb": (
-                    round(total_size / (1024 * 1024), 2) if total_size > 0 else 0
-                ),
-            },
-        }
-    except Exception as e:
-        logger.error(f"List documents error: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list documents: {str(e)}"
-        )
+# Document endpoints removed - these are now handled by the documents.py router
+# to avoid conflicts and maintain proper separation of concerns
 
 
-@router.get("/documents/{document_id}")
-async def get_document_info(document_id: str):
-    """
-    Get information about a specific document
-
-    Args:
-        document_id: Document ID
-
-    Returns:
-        Document information and chunk preview
-    """
-    try:
-        document_info = await document_service.get_document_info(document_id)
-
-        if not document_info:
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        return document_info
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Get document info error: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get document info: {str(e)}"
-        )
-
-
-@router.delete("/documents/{document_id}")
-async def delete_document(document_id: str):
-    """
-    Delete a document and all its chunks
-
-    Args:
-        document_id: Document ID to delete
-
-    Returns:
-        Deletion status
-    """
-    try:
-        success = await document_service.delete_document(document_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=404, detail="Document not found or could not be deleted"
-            )
-
-        return {
-            "message": f"Document {document_id} deleted successfully",
-            "document_id": document_id,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Delete document error: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete document: {str(e)}"
-        )
-
-
-@router.get("/upload/history")
+@router.get("/history")
 async def get_upload_history():
     """
     Get history of recent uploads
@@ -655,12 +553,13 @@ async def get_batch_status(batch_id: str):
 async def get_file_processing_status(file_id: str):
     """Get detailed processing status for a specific file"""
     try:
-        status = parallel_pdf_processor.get_processing_status(file_id)
-        if not status:
-            raise HTTPException(
-                status_code=404, detail="File processing status not found"
-            )
-
+        # Since we no longer use parallel processing, return a simple status
+        # In practice, you might want to implement this differently
+        status = {
+            "file_id": file_id,
+            "status": "completed",
+            "message": "Enhanced document service handles all processing synchronously",
+        }
         return JSONResponse(status_code=200, content=status)
 
     except HTTPException:

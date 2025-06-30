@@ -15,6 +15,14 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   neonColor?: string;
+  sources?: DocumentSource[];
+}
+
+export interface DocumentSource {
+  document_id: string;
+  filename: string;
+  chunk_text: string;
+  similarity_score: number;
 }
 
 export interface Conversation {
@@ -32,6 +40,11 @@ export interface UploadedDocument {
   type: string;
   uploadedAt: Date;
   status: 'processing' | 'ready' | 'error';
+  fullFileName?: string;
+  fileHash?: string;
+  newFileName?: string;
+  fileDataHash?: string;
+  errorMessage?: string;
 }
 
 export interface SystemStatus {
@@ -51,11 +64,41 @@ interface FileUploadResult {
   error?: string;
 }
 
-interface FileUploadPanelProps {
-  onFileUpload: (files: File[]) => Promise<FileUploadResult[]>;
-  onRegisterCallback?: (callback: (file: File, result: any) => void) => void;
-  onUploadStart?: () => void;
-  uploadedDocuments?: UploadedDocument[];
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  sources?: DocumentSource[];
+}
+
+interface Document {
+  id: number;
+  filename: string;
+  file_type: string;
+  upload_date: string;
+  file_size: number;
+  file_hash?: string;
+}
+
+interface ChatPanelProps {
+  messages: Message[];
+  onSendMessage: (message: string) => void;
+  isStreaming: boolean;
+}
+
+interface ConversationPanelProps {
+  conversations: Array<{ id: string; title: string; lastMessage: Date }>;
+  activeConversationId: string | null;
+  onSelectConversation: (id: string) => void;
+  onNewConversation: () => void;
+  onDeleteConversation: (id: string) => void;
+}
+
+interface StatusPanelProps {
+  systemStatus: string;
+  uploadedDocuments: Document[];
+  onRefreshDocuments: () => void;
+  onDeleteDocument: (id: number) => void;
 }
 
 const AppContainer = styled.div`
@@ -98,13 +141,13 @@ const ClearChatButton = styled.button`
   gap: 6px;
   font-size: 0.8rem;
   transition: all 0.2s ease;
-  box-shadow: 0 0 10px rgba(255, 20, 147, 0.3);
+  box-shadow: none;
   
   &:hover:not(:disabled) {
     color: #ffffff;
     border-color: #ff69b4;
     background: linear-gradient(135deg, rgba(255, 20, 147, 0.4) 0%, rgba(255, 0, 128, 0.4) 100%);
-    box-shadow: 0 0 20px rgba(255, 20, 147, 0.6);
+    box-shadow: none;
   }
   
   &:disabled {
@@ -126,20 +169,20 @@ const ConsoleToggle = styled.button`
   gap: 6px;
   font-size: 0.8rem;
   transition: all 0.2s ease;
-  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  box-shadow: none;
   
   &:hover {
     color: #ffffff;
     border-color: #00ffff;
     background: linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(0, 200, 255, 0.2) 100%);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+    box-shadow: none;
   }
   
   &.active {
     color: #ffffff;
     border-color: #00ffff;
     background: linear-gradient(135deg, rgba(0, 255, 255, 0.3) 0%, rgba(0, 200, 255, 0.3) 100%);
-    box-shadow: 0 0 25px rgba(0, 255, 255, 0.8);
+    box-shadow: none;
   }
 `;
 
@@ -198,6 +241,29 @@ function App() {
   });
   const [fileUploadCallback, setFileUploadCallback] = useState<((file: File, result: any) => void) | null>(null);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
+  const [isStreamingResponse, setIsStreamingResponse] = useState(false);
+
+  // Add cache busting utility
+  const addCacheBuster = (url: string): string => {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}_t=${Date.now()}&_r=${Math.random()}`;
+  };
+
+  // Add no-cache headers to fetch requests
+  const fetchWithNoCache = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const bustedUrl = addCacheBuster(url);
+    const headers = {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      ...options.headers,
+    };
+    
+    return fetch(bustedUrl, {
+      ...options,
+      headers,
+    });
+  };
 
   // Persistent storage functions
   const saveToStorage = () => {
@@ -248,6 +314,10 @@ function App() {
       }
     } catch (error) {
       console.error('Error loading from storage:', error);
+      // Clear corrupted storage data
+      localStorage.removeItem('ai-mate-conversations');
+      localStorage.removeItem('ai-mate-documents');
+      localStorage.removeItem('ai-mate-current-conversation');
     }
   };
 
@@ -270,25 +340,37 @@ function App() {
   };
 
   const updateCurrentConversation = (newMessages: ChatMessage[]) => {
-    if (!currentConversationId) {
-      const conversation = createNewConversation();
-      setCurrentConversationId(conversation.id);
+    let conversationId = currentConversationId;
+    
+    // Create conversation if it doesn't exist, but don't reset messages
+    if (!conversationId) {
+      const newConversation: Conversation = {
+        id: Date.now().toString(),
+        title: 'New Conversation',
+        messages: newMessages, // Use the provided messages instead of empty array
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      setConversations(prev => [newConversation, ...prev]);
+      setCurrentConversationId(newConversation.id);
+      conversationId = newConversation.id;
+    } else {
+      // Update existing conversation
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === conversationId) {
+          const title = newMessages.length > 0 ? 
+            newMessages[0].content.slice(0, 50) + (newMessages[0].content.length > 50 ? '...' : '') :
+            'New Conversation';
+          return {
+            ...conv,
+            title,
+            messages: newMessages,
+            updatedAt: new Date()
+          };
+        }
+        return conv;
+      }));
     }
-
-    setConversations(prev => prev.map(conv => {
-      if (conv.id === currentConversationId) {
-        const title = newMessages.length > 0 ? 
-          newMessages[0].content.slice(0, 50) + (newMessages[0].content.length > 50 ? '...' : '') :
-          'New Conversation';
-        return {
-          ...conv,
-          title,
-          messages: newMessages,
-          updatedAt: new Date()
-        };
-      }
-      return conv;
-    }));
   };
 
   const loadConversation = (conversationId: string) => {
@@ -299,53 +381,49 @@ function App() {
     }
   };
 
-  const checkSystemStatus = async () => {
+  const checkSystemStatus = async (skipDuringStreaming = true) => {
+    // Skip status checks during streaming to avoid conflicts
+    if (skipDuringStreaming && isStreamingResponse) {
+      return;
+    }
+
     try {
-      // Check backend
-      const backendResponse = await fetch(`${BACKEND_URL}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(3000)
-      });
-      const backendStatus = backendResponse.ok ? 'online' : 'offline';
+      const response = await fetchWithNoCache(`${BACKEND_URL}/health`);
+      const isBackendOnline = response.ok;
 
-      // Check AI models
-      let aiStatus: 'online' | 'offline' = 'offline';
-      try {
-        const aiResponse = await fetch(`${BACKEND_URL}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: 'Hi',
-            conversation_id: 'health_test',
-            use_context: false,
-            temperature: 0.1
-          }),
-          signal: AbortSignal.timeout(5000)
-        });
-        aiStatus = aiResponse.ok ? 'online' : 'offline';
-      } catch {
-        aiStatus = 'offline';
-      }
+      let aiModelsOnline = false;
+      let documentCount = 0;
 
-      // Check documents
-      let docCount = 0;
-      try {
-        const docsResponse = await fetch(`${BACKEND_URL}/api/documents`, {
-          signal: AbortSignal.timeout(3000)
-        });
-        if (docsResponse.ok) {
-          const docs = await docsResponse.json();
-          docCount = Array.isArray(docs) ? docs.length : 0;
+      if (isBackendOnline) {
+        try {
+          // Check if AI models are accessible
+          const chatResponse = await fetchWithNoCache(`${BACKEND_URL}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: "test",
+              conversation_id: "health_check",
+              use_context: false
+            })
+          });
+          aiModelsOnline = chatResponse.ok;
+
+          // Get document count
+          const docsResponse = await fetchWithNoCache(`${BACKEND_URL}/api/documents/`);
+          if (docsResponse.ok) {
+            const docsData = await docsResponse.json();
+            documentCount = docsData.total || 0;
+          }
+        } catch (error) {
+          // AI models or documents endpoint not accessible
         }
-      } catch {
-        docCount = 0;
       }
 
       setSystemStatus(prev => ({
         ...prev,
-        backend: backendStatus,
-        aiModels: aiStatus,
-        documents: docCount,
+        backend: isBackendOnline ? 'online' : 'offline',
+        aiModels: aiModelsOnline ? 'online' : 'offline',
+        documents: documentCount,
         uploadedDocuments: uploadedDocuments.length,
         cpuCores: navigator.hardwareConcurrency || 8
       }));
@@ -354,8 +432,61 @@ function App() {
     }
   };
 
+  const loadDocumentsFromBackend = async () => {
+    try {
+      const response = await fetchWithNoCache(`${BACKEND_URL}/api/documents/`);
+      if (response.ok) {
+        const data = await response.json();
+        const backendDocs = data.documents.map((doc: any) => ({
+          id: doc.id,
+          name: doc.name,  // API now returns 'name' field correctly mapped
+          size: doc.size,
+          type: doc.type,
+          uploadedAt: new Date(doc.uploadedAt),
+          status: doc.status || 'ready' as const,
+          // Enhanced fields from the new document service
+          fullFileName: doc.fullFileName,
+          fileHash: doc.fileHash,
+          newFileName: doc.newFileName,
+          fileDataHash: doc.fileDataHash,
+          contentType: doc.contentType,
+          metadata: doc.metadata
+        }));
+        setUploadedDocuments(backendDocs);
+      }
+    } catch (error) {
+      console.error('Failed to load documents from backend:', error);
+    }
+  };
+
+  const refreshDocuments = async () => {
+    await loadDocumentsFromBackend();
+    await checkSystemStatus(false);
+  };
+
   const sendMessage = async (message: string) => {
     if (!message.trim()) return;
+    
+    console.log('🚀 Sending message:', message);
+    console.log('📝 Current messages count:', messages.length);
+
+    // Set streaming state to prevent UI conflicts
+    setIsStreamingResponse(true);
+
+    // Ensure we have a conversation ID before sending message
+    let conversationId = currentConversationId;
+    if (!conversationId) {
+      const newConversation: Conversation = {
+        id: Date.now().toString(),
+        title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      setConversations(prev => [newConversation, ...prev]);
+      setCurrentConversationId(newConversation.id);
+      conversationId = newConversation.id;
+    }
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -365,8 +496,6 @@ function App() {
       timestamp: new Date(),
       neonColor: getRandomNeonColor()
     };
-    let newMessages = [...messages, userMessage];
-    setMessages(newMessages);
 
     // Create AI message placeholder
     const aiMessageId = (Date.now() + 1).toString();
@@ -377,7 +506,10 @@ function App() {
       timestamp: new Date(),
       neonColor: getRandomNeonColor()
     };
-    newMessages = [...newMessages, aiMessage];
+
+    // Add both messages at once
+    const newMessages = [...messages, userMessage, aiMessage];
+    console.log('💬 Adding messages, new count will be:', newMessages.length);
     setMessages(newMessages);
 
     try {
@@ -386,7 +518,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message,
-          conversation_id: 'main_chat',
+          conversation_id: conversationId,
           use_context: true,
           temperature: 0.7
         })
@@ -404,6 +536,16 @@ function App() {
       const decoder = new TextDecoder();
       let buffer = '';
       let currentContent = '';
+      let documentSources: DocumentSource[] = [];
+      
+      // Immediate update function for real-time typewriter effect
+      const updateContent = () => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMessageId 
+            ? { ...msg, content: currentContent }
+            : msg
+        ));
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -420,13 +562,11 @@ function App() {
               
               if (data.type === 'content') {
                 currentContent += data.content;
-                
-                // Update the AI message with streaming content
-                setMessages(prev => prev.map(msg => 
-                  msg.id === aiMessageId 
-                    ? { ...msg, content: currentContent }
-                    : msg
-                ));
+                // Update immediately for real-time typewriter effect
+                updateContent();
+              } else if (data.type === 'sources') {
+                // Handle document sources
+                documentSources = data.sources || [];
               } else if (data.type === 'end') {
                 // Streaming finished
                 break;
@@ -440,14 +580,18 @@ function App() {
         }
       }
 
-      // Update conversation with final messages
-      const finalMessages = newMessages.map(msg => 
-        msg.id === aiMessageId 
-          ? { ...msg, content: currentContent || 'No response received' }
-          : msg
-      );
-      setMessages(finalMessages);
-      updateCurrentConversation(finalMessages);
+      // Streaming complete - ensure final update
+
+      // Update with the complete response
+      setMessages(prev => {
+        const finalMessages = prev.map(msg => 
+          msg.id === aiMessageId 
+            ? { ...msg, content: currentContent || 'No response received', sources: documentSources }
+            : msg
+        );
+        updateCurrentConversation(finalMessages);
+        return finalMessages;
+      });
 
     } catch (error) {
       const errorMessage: ChatMessage = {
@@ -457,34 +601,22 @@ function App() {
         timestamp: new Date(),
         neonColor: '#ff4444'
       };
-      const finalMessages = newMessages.map(msg => 
-        msg.id === aiMessageId ? errorMessage : msg
-      );
-      setMessages(finalMessages);
-      updateCurrentConversation(finalMessages);
+      setMessages(prev => {
+        const finalMessages = prev.map(msg => 
+          msg.id === aiMessageId ? errorMessage : msg
+        );
+        updateCurrentConversation(finalMessages);
+        return finalMessages;
+      });
+    } finally {
+      // Clear streaming state
+      setIsStreamingResponse(false);
     }
   };
 
   const clearChat = () => {
     setMessages([]);
     setCurrentConversationId(null);
-  };
-
-  const clearAllData = () => {
-    if (window.confirm('⚠️ This will clear all conversations and document history from your browser. Are you sure?')) {
-      // Clear state
-      setMessages([]);
-      setConversations([]);
-      setUploadedDocuments([]);
-      setCurrentConversationId(null);
-      
-      // Clear localStorage
-      localStorage.removeItem('ai-mate-conversations');
-      localStorage.removeItem('ai-mate-documents');
-      localStorage.removeItem('ai-mate-current-conversation');
-      
-      console.log('🧹 All frontend data cleared');
-    }
   };
 
   const handleFileUpload = async (files: File[]): Promise<FileUploadResult[]> => {
@@ -509,7 +641,7 @@ function App() {
     });
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/upload`, {
+      const response = await fetch(`${BACKEND_URL}/api/upload/documents`, {
         method: 'POST',
         body: formData
       });
@@ -531,14 +663,31 @@ function App() {
               // Add to uploaded documents list
               if (fileResult.status === 'success') {
                 const newDoc: UploadedDocument = {
+                  id: fileResult.document_id?.toString() || Date.now().toString() + Math.random().toString(36),
+                  name: matchingFile.name,
+                  size: matchingFile.size,
+                  type: matchingFile.type,
+                  uploadedAt: new Date(),
+                  status: 'ready',
+                  // Enhanced fields from the new document service
+                  fullFileName: fileResult.full_file_name,
+                  fileHash: fileResult.file_hash,
+                  newFileName: fileResult.new_file_name,
+                  fileDataHash: fileResult.file_data_hash
+                };
+                setUploadedDocuments(prev => [newDoc, ...prev]);
+              } else {
+                // Handle error case
+                const errorDoc: UploadedDocument = {
                   id: Date.now().toString() + Math.random().toString(36),
                   name: matchingFile.name,
                   size: matchingFile.size,
                   type: matchingFile.type,
                   uploadedAt: new Date(),
-                  status: 'ready'
+                  status: 'error',
+                  errorMessage: fileResult.message || 'Processing failed'
                 };
-                setUploadedDocuments(prev => [newDoc, ...prev]);
+                setUploadedDocuments(prev => [errorDoc, ...prev]);
               }
               
               // Notify the FileUploadPanel about the result
@@ -549,8 +698,7 @@ function App() {
           });
         }
         
-        // Refresh system status to update document count
-        await checkSystemStatus();
+        // Note: System status will be updated by the periodic check
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
         
@@ -597,17 +745,25 @@ function App() {
   // Load data on component mount
   useEffect(() => {
     loadFromStorage();
-    checkSystemStatus();
-    const interval = setInterval(checkSystemStatus, 30000); // Every 30 seconds
+    checkSystemStatus(false); // Initial status check
+    
+    // Only load documents if not streaming to avoid conflicts
+    if (!isStreamingResponse) {
+      loadDocumentsFromBackend();
+    }
+    
+    const interval = setInterval(() => {
+      checkSystemStatus(); // Subsequent checks respect streaming state
+    }, 60000); // Every 60 seconds (reduced frequency)
     return () => clearInterval(interval);
-  }, []);
+  }, []); // Empty dependency array to prevent infinite loop
 
-  // Save data whenever conversations or documents change
+  // Save data whenever conversations or documents change (but not during streaming)
   useEffect(() => {
-    if (conversations.length > 0 || uploadedDocuments.length > 0) {
+    if (!isStreamingResponse && (conversations.length > 0 || uploadedDocuments.length > 0)) {
       saveToStorage();
     }
-  }, [conversations, uploadedDocuments, currentConversationId]);
+  }, [conversations, uploadedDocuments, currentConversationId, isStreamingResponse]); // Remove saveToStorage from dependencies
 
   return (
     <AppContainer>
@@ -618,17 +774,6 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <ClearChatButton onClick={clearChat} disabled={messages.length === 0}>
             Clear Chat
-          </ClearChatButton>
-          <ClearChatButton 
-            onClick={clearAllData} 
-            disabled={conversations.length === 0 && uploadedDocuments.length === 0}
-            style={{ 
-              background: 'linear-gradient(135deg, rgba(255, 69, 0, 0.2) 0%, rgba(255, 99, 71, 0.2) 100%)',
-              borderColor: '#ff4500',
-              color: '#ff6347'
-            }}
-          >
-            Clear All Data
           </ClearChatButton>
           <ConsoleToggle 
             className={isConsoleVisible ? 'active' : ''} 
@@ -649,6 +794,7 @@ function App() {
               onFileUpload={handleFileUpload} 
               onRegisterCallback={setFileUploadCallback}
               uploadedDocuments={uploadedDocuments}
+              onRefreshDocuments={refreshDocuments}
             />
           </PanelContainer>
           

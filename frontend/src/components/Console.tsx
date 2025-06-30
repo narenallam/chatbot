@@ -61,7 +61,7 @@ const ConsoleContainer = styled.div<{ $isVisible: boolean; $isMinimized: boolean
   flex-direction: column;
   z-index: 1000;
   transition: ${props => props.$isMaximized || props.$isMinimized ? 'all 0.3s ease' : 'bottom 0.3s ease'};
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
   resize: none;
 `;
 

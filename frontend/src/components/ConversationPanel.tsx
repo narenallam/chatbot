@@ -36,7 +36,6 @@ const PanelContainer = styled.div`
 
 const Header = styled.div`
   padding: 20px;
-  border-bottom: 1px solid #333;
 `;
 
 const Title = styled.h3`
@@ -52,6 +51,7 @@ const Title = styled.h3`
 
 const Controls = styled.div`
   padding: 0 20px 20px;
+  border-bottom: 1px solid #333;
 `;
 
 const ClearButton = styled.button`
@@ -209,10 +209,10 @@ const StatValue = styled.span`
 `;
 
 const NewConversationButton = styled.button`
-  background: linear-gradient(135deg, rgba(0, 255, 255, 0.1) 0%, rgba(0, 200, 255, 0.1) 100%);
-  border: 1px solid #00ffff;
-  color: #00ffff;
-  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(127, 255, 0, 0.1) 0%, rgba(127, 255, 0, 0.1) 100%);
+  border: 1px solid #7FFF00;
+  color: #7FFF00;
+  padding: 8.8px 12px;
   border-radius: 25px;
   cursor: pointer;
   display: flex;
@@ -220,16 +220,16 @@ const NewConversationButton = styled.button`
   gap: 6px;
   font-size: 0.8rem;
   transition: all 0.2s ease;
-  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-  width: 60%;
+  box-shadow: none;
+  width: 45%;
   justify-content: center;
   margin: 0 auto;
   
   &:hover {
     color: #ffffff;
-    border-color: #00ffff;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(0, 200, 255, 0.2) 100%);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+    border-color: #7FFF00;
+    background: linear-gradient(135deg, rgba(127, 255, 0, 0.2) 0%, rgba(127, 255, 0, 0.2) 100%);
+    box-shadow: none;
   }
 `;
 
@@ -250,36 +250,35 @@ const ConversationItem = styled.div<{ $isActive: boolean; $neonColor: string }>`
   };
   border: 1px solid ${props => props.$isActive ? 
     `${props.$neonColor}80` : 
-    '#333'
+    `${props.$neonColor}40`
   };
-  border-radius: 8px;
+  border-radius: 17px;
   padding: 12px;
   margin-bottom: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: ${props => props.$isActive ? 
-    `0 0 15px ${props.$neonColor}30` : 
-    'none'
-  };
+  box-shadow: none;
   
   &:hover {
     background: ${props => 
       `linear-gradient(135deg, ${props.$neonColor}20 0%, ${props.$neonColor}10 100%)`
     };
-    border-color: ${props => `${props.$neonColor}60`};
-    box-shadow: 0 0 12px ${props => `${props.$neonColor}25`};
+    border-color: ${props => `${props.$neonColor}70`};
+    box-shadow: none;
   }
 `;
 
 const NEON_COLORS = [
-  '#00ffff', // Cyan  
-  '#ff1493', // Deep Pink
-  '#00ff00', // Lime
-  '#ff6600', // Orange
-  '#9932cc', // Purple
-  '#ffff00', // Yellow
-  '#ff69b4', // Hot Pink
-  '#00ff7f', // Spring Green
+  '#FF6EC7', // Neon Pink
+  '#00FFFF', // Electric Blue
+  '#A020F0', // Laser Purple
+  '#7FFF00', // Acid Green
+  '#FF073A', // Neon Red
+  '#FF00FF', // Hot Magenta
+  '#FFFF33', // Electric Yellow
+  '#00F5FF', // Glowing Teal
+  '#8A2BE2', // Deep Violet
+  '#FF5F1F', // Neon Orange
 ];
 
 export const ConversationPanel: React.FC<ConversationPanelProps> = ({ 

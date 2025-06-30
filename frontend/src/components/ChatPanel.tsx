@@ -7,6 +7,8 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ChatMessage } from '../App';
+import { DocumentPreview } from './DocumentPreview';
+import { DocumentSources } from './DocumentSources';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -15,12 +17,39 @@ interface ChatPanelProps {
   isLoading: boolean;
 }
 
-const PanelContainer = styled.div`
-  background: #1a1a1a;
+const Container = styled.div`
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-right: 1px solid #333;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  overflow: hidden;
+`;
+
+const MessagesContainer = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  scroll-behavior: smooth;
+  
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #2a2a2a;
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #777;
+  }
 `;
 
 const Header = styled.div`
@@ -38,48 +67,6 @@ const Title = styled.h3`
   gap: 8px;
 `;
 
-const MessagesContainer = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  
-  /* Custom scrollbar styling */
-  &::-webkit-scrollbar {
-    width: 12px;
-    background: #1a1a1a;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background: #1a1a1a;
-    border-radius: 6px;
-    margin: 4px;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #444 0%, #333 100%);
-    border-radius: 6px;
-    border: 2px solid #1a1a1a;
-    cursor: pointer;
-  }
-  
-  &::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #00ffff 0%, #00cccc 100%);
-  }
-  
-  &::-webkit-scrollbar-thumb:active {
-    background: linear-gradient(180deg, #00cccc 0%, #009999 100%);
-  }
-  
-  /* Corner where scrollbars meet */
-  &::-webkit-scrollbar-corner {
-    background: #1a1a1a;
-  }
-`;
-
 const MessageBubble = styled.div<{ $isUser: boolean }>`
   display: flex;
   align-items: flex-start;
@@ -92,82 +79,93 @@ const Avatar = styled.div<{ $isUser: boolean }>`
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: ${props => props.$isUser ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'};
+  background: transparent;
+  border: 1px solid ${props => props.$isUser ? '#00ffff' : '#ff1493'};
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: ${props => props.$isUser ? '#00ffff' : '#ff1493'};
   font-size: 16px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 `;
 
 const MessageContent = styled.div<{ $isUser: boolean; $neonColor?: string }>`
   max-width: 75%;
-  background: ${props => props.$isUser ? 
-    'linear-gradient(135deg, rgba(45, 45, 45, 0.7) 0%, rgba(35, 35, 35, 0.8) 100%)' : 
-    'linear-gradient(135deg, rgba(30, 30, 30, 0.8) 0%, rgba(25, 25, 25, 0.9) 100%)'
-  };
-  border: 0.5px solid ${props => props.$neonColor || (props.$isUser ? '#667eea' : '#ff6b6b')};
-  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(45, 45, 45, 0.7) 0%, rgba(35, 35, 35, 0.8) 100%);
+  border: 0.5px solidrgb(42, 42, 42);
+  border-radius: 17px;
   overflow: hidden;
   color: #fff;
   font-size: 0.9rem;
   line-height: 1.6;
   word-wrap: break-word;
-  box-shadow: 0 0 8px ${props => (props.$neonColor || (props.$isUser ? '#667eea' : '#ff6b6b')) + '20'};
+  box-shadow: none;
   position: relative;
   transition: all 0.2s ease;
   
   &:hover {
-    box-shadow: 0 0 12px ${props => (props.$neonColor || (props.$isUser ? '#667eea' : '#ff6b6b')) + '30'};
-    border-color: ${props => props.$neonColor || (props.$isUser ? '#667eea' : '#ff6b6b')};
+    box-shadow: none;
+    border-color:rgb(70, 70, 70);
   }
 `;
 
-const MessageHeader = styled.div<{ $isUser: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px 8px;
-  border-bottom: 1px solid ${props => props.$isUser ? 'rgba(102, 126, 234, 0.2)' : '#333'};
-  background: ${props => props.$isUser ? 
-    'rgba(102, 126, 234, 0.05)' : 
-    'rgba(255, 255, 255, 0.02)'
-  };
-`;
 
-const MessageRole = styled.div<{ $isUser: boolean }>`
+
+const MessageCopyButton = styled.button`
+  background: linear-gradient(135deg, rgba(35, 35, 40, 0.7) 0%, rgba(25, 25, 30, 0.8) 100%);
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: ${props => props.$isUser ? '#8b9dc3' : '#ff6b6b'};
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-`;
-
-const CopyButton = styled.button`
-  background: none;
-  border: none;
-  color: #888;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
   font-size: 0.7rem;
-  transition: all 0.2s ease;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   
   &:hover {
-    color: #00ffff;
-    background: rgba(0, 255, 255, 0.1);
+    color: #ffffff;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.15) 0%, rgba(0, 200, 255, 0.2) 100%);
+    box-shadow: 0 3px 12px rgba(0, 255, 255, 0.15);
+    transform: translateY(-0.5px);
   }
   
-  .material-icons {
-    font-size: 14px;
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 255, 255, 0.2);
+  }
+`;
+
+const MessageCopyIcon = styled.div`
+  position: relative;
+  width: 14px;
+  height: 14px;
+  
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    border: 1.5px solid currentColor;
+    border-radius: 4px;
+  }
+  
+  &::before {
+    width: 9px;
+    height: 9px;
+    top: 0;
+    left: 2.5px;
+  }
+  
+  &::after {
+    width: 9px;
+    height: 9px;
+    top: 2.5px;
+    left: 0;
+    background: #1a1a1a;
   }
 `;
 
@@ -186,135 +184,156 @@ const MessageTime = styled.div`
 
 const MarkdownContent = styled.div`
   color: #e0e0e0;
-  line-height: 1.7;
+  line-height: 1.8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-feature-settings: "liga" 1, "calt" 1;
   
   h1, h2, h3, h4, h5, h6 {
-    color: #00ffff;
-    margin: 20px 0 12px 0;
-    font-weight: 600;
+    color: #ffffff;
+    margin: 24px 0 16px 0;
+    font-weight: 700;
     display: flex;
     align-items: center;
     gap: 8px;
+    letter-spacing: -0.02em;
     
     &:first-child {
       margin-top: 0;
     }
     
     &::before {
-      font-family: 'Material Icons';
       font-size: 0.9em;
     }
   }
   
-  h1::before { content: '🎯'; }
-  h2::before { content: '📋'; }
-  h3::before { content: '🔹'; }
-  h4::before { content: '▶️'; }
-  h5::before { content: '🔸'; }
-  h6::before { content: '•'; }
+  h1 { 
+    font-size: 1.8em;
+    &::before { content: '🎯'; }
+  }
+  h2 { 
+    font-size: 1.5em;
+    &::before { content: '📋'; }
+  }
+  h3 { 
+    font-size: 1.3em;
+    &::before { content: '🔹'; }
+  }
+  h4 { 
+    font-size: 1.1em;
+    &::before { content: '▶️'; }
+  }
+  h5 { 
+    font-size: 1em;
+    &::before { content: '🔸'; }
+  }
+  h6 { 
+    font-size: 0.95em;
+    &::before { content: '•'; }
+  }
   
   p {
-    margin: 12px 0;
-    color: #e0e0e0;
+    margin: 16px 0;
+    color: #e8e8e8;
+    font-weight: 400;
+    line-height: 1.7;
   }
   
   ul, ol {
-    margin: 12px 0;
-    padding-left: 20px;
+    margin: 16px 0;
+    padding-left: 24px;
   }
   
   li {
-    margin: 6px 0;
-    color: #e0e0e0;
+    margin: 8px 0;
+    color: #e8e8e8;
+    line-height: 1.6;
     
     &::marker {
       color: #00ffff;
+      font-weight: 600;
     }
   }
   
   blockquote {
     border-left: 4px solid #00ffff;
     background: rgba(0, 255, 255, 0.05);
-    margin: 16px 0;
-    padding: 12px 16px;
+    margin: 20px 0;
+    padding: 16px 20px;
     border-radius: 0 8px 8px 0;
-    color: #b0b0b0;
+    color: #d0d0d0;
     font-style: italic;
+    font-weight: 400;
   }
   
-  code {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ff9800;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
-    font-size: 0.85em;
+  code:not(.custom-code-block code) {
+    background: linear-gradient(135deg, rgba(40, 40, 45, 0.8) 0%, rgba(30, 30, 35, 0.9) 100%);
+    color: #e8e8e8;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-family: 'Noto Sans Mono', 'Fira Code', 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+    font-weight: 500;
+    font-size: 0.9em;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    font-feature-settings: "liga" 1, "calt" 1;
   }
-  
-  pre {
-    background: #1e1e1e !important;
-    border: 1px solid #333;
-    border-radius: 8px;
-    margin: 16px 0;
-    overflow-x: auto;
-    
-    code {
-      background: none;
-      color: inherit;
-      padding: 0;
-    }
-  }
+
   
   table {
     border-collapse: collapse;
     width: 100%;
-    margin: 16px 0;
-    border: 1px solid #333;
-    border-radius: 8px;
+    margin: 20px 0;
+    border: 1px solid #404040;
+    border-radius: 10px;
     overflow: hidden;
+    font-size: 0.95em;
   }
   
   th, td {
-    border: 1px solid #333;
-    padding: 12px;
+    border: 1px solid #404040;
+    padding: 14px 16px;
     text-align: left;
   }
   
   th {
-    background: rgba(0, 255, 255, 0.1);
-    color: #00ffff;
-    font-weight: 600;
+    background: rgba(0, 255, 255, 0.12);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.9em;
   }
   
   tr:nth-child(even) {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.03);
   }
   
   a {
-    color: #00ffff;
+    color: #4a9eff;
     text-decoration: none;
-    border-bottom: 1px dotted #00ffff;
+    font-weight: 500;
     
     &:hover {
-      border-bottom-style: solid;
+      text-decoration: underline;
+      color: #6ab7ff;
     }
   }
   
   strong {
-    color: #fff;
-    font-weight: 600;
+    color: #ffffff;
+    font-weight: 700;
   }
   
   em {
-    color: #ccc;
+    color: #d8d8d8;
     font-style: italic;
+    font-weight: 400;
   }
   
   hr {
     border: none;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, #333, transparent);
-    margin: 24px 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #404040, transparent);
+    margin: 32px 0;
+    border-radius: 1px;
   }
 `;
 
@@ -324,14 +343,14 @@ const InputContainer = styled.div<{ $isDragActive?: boolean }>`
     'linear-gradient(135deg, rgba(0, 255, 255, 0.08) 0%, rgba(0, 200, 255, 0.08) 100%)' :
     'linear-gradient(135deg, rgba(0, 255, 255, 0.02) 0%, rgba(0, 200, 255, 0.02) 100%)'
   };
-  box-shadow: 0 -5px 15px rgba(0, 255, 255, 0.1);
+  box-shadow: none;
   min-height: 176px;
   transition: all 0.2s ease;
   
   ${props => props.$isDragActive && `
     border: 2px dashed #00ffff;
     border-radius: 12px;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+    box-shadow: none;
   `}
 `;
 
@@ -341,8 +360,6 @@ const InputWrapper = styled.div`
   align-items: flex-end;
   position: relative;
 `;
-
-
 
 const DragOverlay = styled.div<{ $isDragActive: boolean }>`
   position: absolute;
@@ -377,9 +394,9 @@ const DragHint = styled.div`
 
 const MessageInput = styled.textarea`
   flex: 1;
-  background: linear-gradient(135deg, rgba(0, 255, 255, 0.05) 0%, rgba(0, 200, 255, 0.05) 100%);
-  border: 1px solid #00ffff;
-  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(136, 136, 136, 0.05) 0%, rgba(136, 136, 136, 0.05) 100%);
+  border: 1px solid #888888;
+  border-radius: 17px;
   padding: 16px 20px;
   color: #ffffff;
   font-size: 0.9rem;
@@ -392,13 +409,13 @@ const MessageInput = styled.textarea`
   
   &:focus {
     outline: none;
-    border-color: #00ffff;
+    border-color: #888888;
     box-shadow: none;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.1) 0%, rgba(0, 200, 255, 0.1) 100%);
+    background: linear-gradient(135deg, rgba(136, 136, 136, 0.1) 0%, rgba(136, 136, 136, 0.1) 100%);
   }
   
   &::placeholder {
-    color: #00cccc;
+    color: #888888;
     opacity: 0.7;
   }
 `;
@@ -418,11 +435,11 @@ const SendButton = styled.button<{ $disabled: boolean }>`
   justify-content: center;
   cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
   transition: all 0.2s ease;
-  box-shadow: ${props => props.$disabled ? 'none' : '0 0 15px rgba(0, 255, 255, 0.5)'};
+  box-shadow: none;
   
   &:hover:not(:disabled) {
     transform: scale(1.1);
-    box-shadow: 0 0 25px rgba(0, 255, 255, 0.8);
+    box-shadow: none;
     background: linear-gradient(135deg, #ffffff 0%, #00ffff 100%);
   }
   
@@ -488,7 +505,7 @@ const CopyNotification = styled.div<{ $visible: boolean }>`
   color: white;
   padding: 12px 20px;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  box-shadow: none;
   z-index: 1000;
   transform: translateY(${props => props.$visible ? '0' : '-100px'});
   opacity: ${props => props.$visible ? '1' : '0'};
@@ -502,51 +519,91 @@ const CopyNotification = styled.div<{ $visible: boolean }>`
 
 const CodeBlock = styled.div`
   background: #1e1e1e;
-  border: 1px solid #333;
+  border: 1px solid #444;
   border-radius: 8px;
-  margin: 12px 0;
+  margin: 16px 0;
   overflow: hidden;
 `;
 
 const CodeHeader = styled.div`
-  background: #2d2d2d;
+  background: #2a2a2a;
   padding: 8px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #444;
 `;
 
 const CodeLanguage = styled.span`
   color: #00ffff;
   font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 500;
+  text-transform: capitalize;
 `;
 
-const CopyCodeButton = styled.button`
-  background: none;
+const CopyButton = styled.button`
+  background: linear-gradient(135deg, rgba(40, 40, 45, 0.8) 0%, rgba(30, 30, 35, 0.9) 100%);
   border: none;
-  color: #888;
+  color: #aaa;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  transition: all 0.2s ease;
+  gap: 8px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   
   &:hover {
-    color: #00ffff;
-    background: rgba(0, 255, 255, 0.1);
+    color: #ffffff;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(0, 200, 255, 0.25) 100%);
+    box-shadow: 0 4px 16px rgba(0, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 255, 255, 0.3);
+  }
+`;
+
+const CopyIcon = styled.div`
+  position: relative;
+  width: 16px;
+  height: 16px;
+  
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    border: 2px solid currentColor;
+    border-radius: 5px;
+  }
+  
+  &::before {
+    width: 11px;
+    height: 11px;
+    top: 0;
+    left: 3px;
+  }
+  
+  &::after {
+    width: 11px;
+    height: 11px;
+    top: 3px;
+    left: 0;
+    background: #1e1e1e;
   }
 `;
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onFileUpload, isLoading }) => {
+  console.log('🎯 ChatPanel received messages:', messages.length, messages);
+  
   const [inputValue, setInputValue] = useState('');
   const [copyNotification, setCopyNotification] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<{ documentId: string; filename: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -595,6 +652,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
     }
   };
 
+  const handleDocumentClick = (documentId: string, filename: string) => {
+    setPreviewDocument({ documentId, filename });
+  };
+
+  const handleClosePreview = () => {
+    setPreviewDocument(null);
+  };
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles || acceptedFiles.length === 0) {
       return;
@@ -613,15 +678,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'text/plain': ['.txt'],
       'text/markdown': ['.md'],
-      'text/html': ['.html']
+      'text/html': ['.html'],
+      'image/png': ['.png'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/heic': ['.heic'],
+      'image/bmp': ['.bmp'],
+      'image/gif': ['.gif'],
+      'image/tiff': ['.tiff']
     },
     multiple: true,
     noClick: true // Prevent clicking on the entire area from opening file dialog
   });
-
-
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -669,7 +742,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          code({ node, className, children, ...props }: any) {
+                    code({ node, className, children, ...props }: any) {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
             const isBlockCode = !props.inline;
@@ -678,70 +751,58 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
               const codeContent = String(children).replace(/\n$/, '');
               
               return (
-                <CodeBlock>
+                <CodeBlock className="custom-code-block">
                   <CodeHeader>
                     <CodeLanguage>{language}</CodeLanguage>
-                    <CopyCodeButton onClick={() => copyToClipboard(codeContent)}>
-                      <span className="material-icons" style={{ fontSize: '14px' }}>content_copy</span>
-                    </CopyCodeButton>
+                    <CopyButton onClick={() => copyToClipboard(codeContent)}>
+                      <CopyIcon />
+                      Copy
+                    </CopyButton>
                   </CodeHeader>
-                  <SyntaxHighlighter
-                    style={{
-                      ...tomorrow,
-                      // Override with neon theme
-                      'pre[class*="language-"]': {
-                        ...tomorrow['pre[class*="language-"]'],
-                        background: '#1e1e1e',
+                  <div style={{
+                    background: '#1e1e1e',
+                    padding: '16px',
+                    fontSize: '0.85rem',
+                    fontFamily: "'Noto Sans Mono', 'Fira Code', 'Monaco', 'Consolas', monospace",
+                    fontWeight: 300,
+                    lineHeight: 1.5,
+                    overflow: 'auto'
+                  }}>
+                    <SyntaxHighlighter
+                      style={tomorrow}
+                      language={language}
+                      PreTag="div"
+                      customStyle={{
+                        background: 'transparent',
                         margin: 0,
-                        padding: '16px',
-                        overflow: 'auto'
-                      },
-                      'code[class*="language-"]': {
-                        ...tomorrow['code[class*="language-"]'],
-                        fontFamily: "'Noto Sans Mono', 'Fira Code', 'Monaco', 'Consolas', monospace",
-                        fontSize: '0.85rem',
-                        lineHeight: 1.6
-                      }
-                    } as any}
-                    language={language}
-                    PreTag="div"
-                    customStyle={{
-                      background: '#1e1e1e',
-                      margin: 0,
-                      padding: '16px',
-                      fontSize: '0.85rem',
-                      fontFamily: "'Noto Sans Mono', 'Fira Code', 'Monaco', 'Consolas', monospace",
-                      lineHeight: 1.6,
-                      overflow: 'auto'
-                    }}
-                    codeTagProps={{
-                      style: {
-                        fontFamily: "'Noto Sans Mono', 'Fira Code', 'Monaco', 'Consolas', monospace",
-                        fontSize: '0.85rem'
-                      }
-                    }}
-                  >
-                    {codeContent}
-                  </SyntaxHighlighter>
+                        padding: 0,
+                        fontSize: 'inherit',
+                        fontFamily: 'inherit',
+                        lineHeight: 'inherit'
+                      }}
+                    >
+                      {codeContent}
+                    </SyntaxHighlighter>
+                  </div>
                 </CodeBlock>
               );
             }
             
-            // Inline code with static cyan highlighting
+            // Inline code
             return (
               <code 
                 className={className} 
                 {...props}
                 style={{
-                  background: '#00ffff20',
-                  padding: '3px 6px',
-                  borderRadius: '4px',
+                  background: 'linear-gradient(135deg, rgba(40, 40, 45, 0.8) 0%, rgba(30, 30, 35, 0.9) 100%)',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
                   fontSize: '0.85em',
                   fontFamily: "'Noto Sans Mono', 'Fira Code', 'Monaco', 'Consolas', monospace",
-                  fontWeight: 500,
-                  color: '#ffffff',
-                  border: '1px solid #00ffff60',
-                  boxShadow: '0 0 8px #00ffff30'
+                  fontWeight: 300,
+                  color: '#aaa',
+                  backdropFilter: 'blur(8px)',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)'
                 }}
               >
                 {children}
@@ -756,8 +817,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
   };
 
   return (
-    <PanelContainer>
-
+    <Container>
       <MessagesContainer>
         {messages.length === 0 ? (
           <EmptyState>
@@ -780,23 +840,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                 $isUser={message.role === 'user'}
                 $neonColor={message.neonColor}
               >
-
                 <MessageBody>
-                  {message.role === 'assistant' && (
-                    <CopyButton 
-                      onClick={() => copyToClipboard(message.content)}
-                      style={{
-                        position: 'absolute',
-                        top: '8px',
-                        right: '8px',
-                        opacity: 0,
-                        transition: 'opacity 0.2s ease'
-                      }}
-                      className="copy-button"
-                    >
-                      <span className="material-icons" style={{ fontSize: '14px' }}>content_copy</span>
-                    </CopyButton>
-                  )}
                   <MarkdownContent>
                     {message.role === 'user' ? (
                       <p>{message.content}</p>
@@ -804,7 +848,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                       renderMarkdown(message.content)
                     )}
                   </MarkdownContent>
+                  
+                  {/* Show document sources for AI messages */}
+                  {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
+                    <DocumentSources 
+                      sources={message.sources} 
+                      onDocumentClick={handleDocumentClick}
+                    />
+                  )}
+                  
                   <MessageTime>
+                    <MessageCopyButton 
+                      onClick={() => copyToClipboard(message.content)}
+                      style={{
+                        float: 'left',
+                        marginRight: '8px',
+                        marginTop: '0px'
+                      }}
+                      title="Copy message"
+                    >
+                      <MessageCopyIcon />
+                      Copy
+                    </MessageCopyButton>
                     {formatTime(message.timestamp)}
                   </MessageTime>
                 </MessageBody>
@@ -819,7 +884,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
         <DragOverlay $isDragActive={isDragActive}>
           <Upload size={48} color="#00ffff" />
           <DragText>Drop files here</DragText>
-          <DragHint>Supports PDF, DOCX, TXT, MD, HTML • Max 500MB</DragHint>
+          <DragHint>Supports PDF, DOCX, PPT, XLS, TXT, MD, HTML, Images • Max 500MB</DragHint>
         </DragOverlay>
         
         <form onSubmit={handleSubmit}>
@@ -832,7 +897,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                 adjustTextareaHeight();
               }}
               onKeyPress={handleKeyPress}
-              placeholder="Type your message or drag files here..."
+              placeholder="Type your message here..."
               disabled={isLoading}
               rows={1}
             />
@@ -857,6 +922,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
         <span className="material-icons" style={{ fontSize: '18px' }}>check_circle</span>
         Copied to clipboard!
       </CopyNotification>
-    </PanelContainer>
+
+      {/* Document Preview Modal */}
+      {previewDocument && (
+        <DocumentPreview
+          documentId={previewDocument.documentId}
+          filename={previewDocument.filename}
+          isOpen={!!previewDocument}
+          onClose={handleClosePreview}
+        />
+      )}
+    </Container>
   );
 }; 

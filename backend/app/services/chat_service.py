@@ -16,6 +16,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app.core.config import settings
 from app.services.vector_service import vector_service
+from app.services.database_service import database_service
 from app.models.schemas import ChatMessage, ChatRole, ChatResponse
 from app.core.prompts import get_system_prompt, get_rag_prompt
 
@@ -38,6 +39,9 @@ class ChatService:
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.default_temperature,
+                    timeout=120,  # 2 minutes timeout
+                    request_timeout=120,  # 2 minutes request timeout
+                    num_predict=2048,  # Max tokens to generate
                 )
                 logger.info(f"Initialized Ollama model: {settings.ollama_model}")
 
@@ -58,6 +62,9 @@ class ChatService:
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.default_temperature,
+                    timeout=120,  # 2 minutes timeout
+                    request_timeout=120,  # 2 minutes request timeout
+                    num_predict=2048,  # Max tokens to generate
                 )
                 logger.info(
                     f"Fallback: Initialized Ollama model: {settings.ollama_model}"
@@ -87,6 +94,10 @@ class ChatService:
             ChatResponse with AI reply and sources
         """
         try:
+            logger.info(
+                f"Chat request received: message='{message}', use_context={use_context}"
+            )
+
             # Generate conversation ID if not provided
             if not conversation_id:
                 conversation_id = str(uuid.uuid4())
@@ -98,22 +109,31 @@ class ChatService:
             context_docs = []
             sources = []
             if use_context:
+                logger.info("Retrieving context documents...")
                 context_docs = await self._retrieve_context(message)
-                sources = [
-                    {
-                        "document_id": doc["document_id"],
-                        "filename": doc["metadata"].get("filename", "Unknown"),
-                        "chunk_text": (
-                            doc["text"][:200] + "..."
-                            if len(doc["text"]) > 200
-                            else doc["text"]
-                        ),
-                        "similarity_score": doc["similarity_score"],
-                    }
-                    for doc in context_docs
-                ]
+                logger.info(f"Retrieved {len(context_docs)} context documents")
+
+                # Create sources with proper document IDs
+                sources = []
+                for doc in context_docs:
+                    file_hash = doc["metadata"].get("file_hash", "unknown")
+                    document_id = await self._get_document_id_by_hash(file_hash)
+
+                    sources.append(
+                        {
+                            "document_id": document_id,
+                            "filename": doc["metadata"].get("source", "Unknown"),
+                            "chunk_text": (
+                                doc["text"][:200] + "..."
+                                if len(doc["text"]) > 200
+                                else doc["text"]
+                            ),
+                            "similarity_score": doc.get("similarity_score", 0.0),
+                        }
+                    )
 
             # Build prompt with context
+            logger.info("Building chat prompt...")
             prompt = self._build_chat_prompt(message, context_docs, memory)
 
             # Set temperature if provided
@@ -121,7 +141,9 @@ class ChatService:
                 self.llm.temperature = temperature
 
             # Generate response
+            logger.info("Generating LLM response...")
             response = await self._generate_response(prompt)
+            logger.info(f"LLM response generated: {len(response)} characters")
 
             # Add messages to memory
             memory.chat_memory.add_user_message(message)
@@ -130,6 +152,7 @@ class ChatService:
             # Count tokens (approximate)
             tokens_used = self._estimate_tokens(message + response)
 
+            logger.info(f"Chat completed successfully with {len(sources)} sources")
             return ChatResponse(
                 message=response,
                 conversation_id=conversation_id,
@@ -138,7 +161,7 @@ class ChatService:
             )
 
         except Exception as e:
-            logger.error(f"Failed to process chat message: {e}")
+            logger.error(f"Failed to process chat message: {e}", exc_info=True)
             raise
 
     async def chat_stream(
@@ -161,6 +184,10 @@ class ChatService:
             Streaming response chunks
         """
         try:
+            logger.info(
+                f"STREAM: Chat stream request received: message='{message}', use_context={use_context}"
+            )
+
             # Generate conversation ID if not provided
             if not conversation_id:
                 conversation_id = str(uuid.uuid4())
@@ -172,23 +199,32 @@ class ChatService:
             context_docs = []
             sources = []
             if use_context:
+                logger.info("STREAM: Retrieving context documents...")
                 context_docs = await self._retrieve_context(message)
-                sources = [
-                    {
-                        "document_id": doc["document_id"],
-                        "filename": doc["metadata"].get("filename", "Unknown"),
-                        "chunk_text": (
-                            doc["text"][:200] + "..."
-                            if len(doc["text"]) > 200
-                            else doc["text"]
-                        ),
-                        "similarity_score": doc["similarity_score"],
-                    }
-                    for doc in context_docs
-                ]
+                logger.info(f"STREAM: Retrieved {len(context_docs)} context documents")
+
+                # Create sources with proper document IDs
+                sources = []
+                for doc in context_docs:
+                    file_hash = doc["metadata"].get("file_hash", "unknown")
+                    document_id = await self._get_document_id_by_hash(file_hash)
+
+                    sources.append(
+                        {
+                            "document_id": document_id,
+                            "filename": doc["metadata"].get("source", "Unknown"),
+                            "chunk_text": (
+                                doc["text"][:200] + "..."
+                                if len(doc["text"]) > 200
+                                else doc["text"]
+                            ),
+                            "similarity_score": doc.get("similarity_score", 0.0),
+                        }
+                    )
 
             # Send sources first
             if sources:
+                logger.info(f"STREAM: Sending {len(sources)} sources to frontend")
                 yield {
                     "type": "sources",
                     "sources": sources,
@@ -196,6 +232,7 @@ class ChatService:
                 }
 
             # Build prompt with context
+            logger.info("STREAM: Building chat prompt...")
             prompt = self._build_chat_prompt(message, context_docs, memory)
 
             # Set temperature if provided
@@ -203,9 +240,12 @@ class ChatService:
                 self.llm.temperature = temperature
 
             # Generate streaming response
+            logger.info("STREAM: Starting LLM streaming response...")
             full_response = ""
+            chunk_count = 0
             async for chunk in self._generate_streaming_response(prompt):
                 if chunk:
+                    chunk_count += 1
                     full_response += chunk
                     yield {
                         "type": "content",
@@ -213,20 +253,25 @@ class ChatService:
                         "conversation_id": conversation_id,
                     }
 
+            logger.info(
+                f"STREAM: Completed streaming with {chunk_count} chunks, total length: {len(full_response)}"
+            )
+
             # Add messages to memory after completion
             memory.chat_memory.add_user_message(message)
             memory.chat_memory.add_ai_message(full_response)
 
             # Send final metadata
-            tokens_used = self._estimate_tokens(message + full_response)
             yield {
-                "type": "metadata",
-                "tokens_used": tokens_used,
+                "type": "end",
                 "conversation_id": conversation_id,
+                "total_tokens": self._estimate_tokens(message + full_response),
             }
 
         except Exception as e:
-            logger.error(f"Failed to process streaming chat message: {e}")
+            logger.error(
+                f"STREAM: Failed to process streaming chat message: {e}", exc_info=True
+            )
             yield {
                 "type": "error",
                 "error": str(e),
@@ -247,7 +292,9 @@ class ChatService:
             List of relevant documents
         """
         try:
-            return vector_service.search_similar(query=query, n_results=n_results)
+            # Use hybrid search for better relevance
+            results = vector_service.hybrid_search(query=query, n_results=n_results)
+            return results
         except Exception as e:
             logger.error(f"Failed to retrieve context: {e}")
             return []
@@ -324,13 +371,22 @@ class ChatService:
             AI response
         """
         try:
+            logger.info(f"Calling LLM with prompt length: {len(prompt)} characters")
+            logger.debug(f"Prompt content: {prompt[:500]}...")  # Log first 500 chars
+
             # Use invoke for both Ollama and OpenAI
             messages = [HumanMessage(content=prompt)]
+            logger.info("Invoking LLM...")
             response = await self.llm.ainvoke(messages)
+            logger.info(f"LLM response received: {len(response.content)} characters")
+            logger.debug(
+                f"Response content: {response.content[:200]}..."
+            )  # Log first 200 chars
+
             return response.content
 
         except Exception as e:
-            logger.error(f"Failed to generate response: {e}")
+            logger.error(f"Failed to generate response: {e}", exc_info=True)
             return f"I apologize, but I encountered an error while processing your request: {str(e)}"
 
     async def _generate_streaming_response(self, prompt: str):
@@ -344,13 +400,29 @@ class ChatService:
             Response chunks
         """
         try:
+            logger.info(
+                f"STREAM LLM: Starting streaming response with prompt length: {len(prompt)}"
+            )
+            logger.debug(f"STREAM LLM: Prompt preview: {prompt[:300]}...")
+
             messages = [HumanMessage(content=prompt)]
+            chunk_count = 0
+
+            logger.info("STREAM LLM: Calling LLM astream...")
             async for chunk in self.llm.astream(messages):
                 if hasattr(chunk, "content") and chunk.content:
+                    chunk_count += 1
+                    logger.debug(
+                        f"STREAM LLM: Received chunk {chunk_count}: {len(chunk.content)} chars"
+                    )
                     yield chunk.content
 
+            logger.info(f"STREAM LLM: Completed streaming with {chunk_count} chunks")
+
         except Exception as e:
-            logger.error(f"Failed to generate streaming response: {e}")
+            logger.error(
+                f"STREAM LLM: Failed to generate streaming response: {e}", exc_info=True
+            )
             raise
 
     def _get_conversation_memory(
@@ -530,6 +602,21 @@ class ChatService:
 - Length: {length}{context_text}{additional_text}
 
 Please create high-quality content that meets these requirements."""
+
+    async def _get_document_id_by_hash(self, file_hash: str) -> str:
+        """Get document ID by file hash"""
+        try:
+            files = database_service.get_files()
+
+            for file in files:
+                if file.get("file_hash") == file_hash:
+                    return file.get("id", "unknown")
+
+            logger.warning(f"No document found for hash: {file_hash}")
+            return "unknown"
+        except Exception as e:
+            logger.error(f"Error getting document ID by hash: {str(e)}")
+            return "unknown"
 
 
 # Global chat service instance

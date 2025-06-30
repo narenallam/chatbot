@@ -79,6 +79,7 @@ overrides==7.7.0
 packaging==24.2
 pdf2image==1.17.0
 pillow==11.2.1
+pillow-heif==0.15.0
 posthog==5.4.0
 propcache==0.3.2
 protobuf==5.29.5
@@ -140,3 +141,21 @@ wheel==0.45.1
 yarl==1.20.1
 zipp==3.23.0
 zstandard==0.23.0
+
+# Additional libraries for comprehensive file conversion
+# Document conversion
+docx2txt==0.8
+python-pptx==1.0.2
+
+# Spreadsheet and CSV handling  
+xlsxwriter==3.2.0
+csvkit==2.1.0
+
+# Image processing and conversion
+img2pdf==0.5.1
+
+# Enhanced PDF generation
+reportlab==4.2.5
+
+# File type detection (platform specific)
+python-magic-bin==0.4.14; platform_system == "Windows"

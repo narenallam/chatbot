@@ -1,6 +1,6 @@
 """
-Document Processing Service for the Personal Assistant AI Chatbot
-Handles document upload, parsing, chunking, and vector storage
+Enhanced Document Processing Service for the Personal Assistant AI Chatbot
+Handles document upload, parsing, OCR, and storage for specific file types
 """
 
 import asyncio
@@ -14,11 +14,62 @@ import warnings
 import io
 import sys
 from contextlib import contextmanager
+import hashlib
+import json
+import tempfile
 
 # Document processing imports
 import PyPDF2
 from docx import Document as DocxDocument
-from bs4 import BeautifulSoup
+
+# Additional document processing imports
+try:
+    from pptx import Presentation
+
+    PPTX_AVAILABLE = True
+except ImportError:
+    PPTX_AVAILABLE = False
+
+try:
+    import pandas as pd
+    import openpyxl
+
+    EXCEL_AVAILABLE = True
+except ImportError:
+    EXCEL_AVAILABLE = False
+
+# Image and OCR processing imports
+try:
+    from PIL import Image
+
+    IMAGE_AVAILABLE = True
+except ImportError:
+    IMAGE_AVAILABLE = False
+
+# HEIF support
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+    HEIF_AVAILABLE = True
+except ImportError:
+    HEIF_AVAILABLE = False
+
+# OCR support
+try:
+    import pytesseract
+
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+
+# Enhanced PDF processing
+try:
+    import fitz  # PyMuPDF
+
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
 
 # LangChain imports for text processing
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -27,7 +78,7 @@ from langchain.schema import Document
 # Internal imports
 from app.core.config import settings
 from app.services.vector_service import vector_service
-from app.services.database_service import DatabaseService
+from app.services.database_service import database_service
 
 logger = logging.getLogger(__name__)
 
@@ -61,476 +112,679 @@ def suppress_pdf_warnings():
 
 
 class DocumentService:
-    """Document processing and storage service"""
+    """Enhanced document processing and storage service with OCR support"""
 
     def __init__(self):
-        self.db_service = DatabaseService()
+        self.db_service = database_service
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             length_function=len,
         )
+        self._setup_storage_directories()
+        self._log_capabilities()
+
+    def _setup_storage_directories(self):
+        """Setup storage directories"""
+        directories = [
+            Path("data/hashed_files"),
+            Path("data/original_files"),  # Store original files with original names
+            Path("data/metadata"),
+            Path("data/logs"),
+            Path("data/temp"),
+        ]
+        for directory in directories:
+            directory.mkdir(parents=True, exist_ok=True)
+
+    def _log_capabilities(self):
+        """Log available processing capabilities"""
+        capabilities = []
+        if IMAGE_AVAILABLE:
+            capabilities.append("Image processing (PIL)")
+        if HEIF_AVAILABLE:
+            capabilities.append("HEIF support")
+        if OCR_AVAILABLE:
+            capabilities.append("OCR (pytesseract)")
+        if PYMUPDF_AVAILABLE:
+            capabilities.append("Enhanced PDF (PyMuPDF)")
+        if PPTX_AVAILABLE:
+            capabilities.append("PowerPoint processing")
+        if EXCEL_AVAILABLE:
+            capabilities.append("Excel processing")
+
+        logger.info(f"Document processing capabilities: {', '.join(capabilities)}")
+
+    def _calculate_file_hash(self, file_content: bytes) -> str:
+        """Calculate SHA256 hash of file content"""
+        return hashlib.sha256(file_content).hexdigest()
+
+    def _calculate_data_hash(self, file_content: bytes, file_size: int) -> str:
+        """Calculate hash of file data + size for duplicate detection"""
+        data = file_content + str(file_size).encode()
+        return hashlib.sha256(data).hexdigest()
+
+    def _generate_new_filename(self, file_hash: str, original_filename: str) -> str:
+        """Generate new filename using hash and original extension"""
+        extension = Path(original_filename).suffix.lower()
+        return f"{file_hash}{extension}"
+
+    def _get_content_type(self, filename: str) -> str:
+        """Get MIME content type from filename"""
+        extension = Path(filename).suffix.lower()
+        content_types = {
+            ".pdf": "application/pdf",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".heic": "image/heic",
+            ".heif": "image/heif",
+        }
+        return content_types.get(extension, "application/octet-stream")
+
+    def _is_supported_file_type(self, filename: str) -> bool:
+        """Check if file type is supported"""
+        supported_extensions = {
+            ".pdf",
+            ".docx",
+            ".pptx",
+            ".xlsx",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".heic",
+            ".heif",
+        }
+        extension = Path(filename).suffix.lower()
+        return extension in supported_extensions
 
     async def process_uploaded_file(
         self, file_content: bytes, filename: str, content_type: str
     ) -> Dict[str, Any]:
         """
-        Process an uploaded file and store it in the vector database
+        Process uploaded file with enhanced OCR capabilities
 
         Args:
             file_content: File content as bytes
             filename: Original filename
-            content_type: MIME type of the file
+            content_type: MIME content type
 
         Returns:
-            Processing result with document ID and statistics
+            Processing result dictionary
         """
-        document_id = str(uuid.uuid4())
         start_time = datetime.now()
 
-        # Initialize status tracking
-        status = {
-            "document_id": document_id,
-            "filename": filename,
-            "file_size": len(file_content),
-            "status": "processing",
-            "stages": {
-                "extraction": {
-                    "status": "starting",
-                    "message": "Preparing to extract text",
-                },
-                "chunking": {
-                    "status": "pending",
-                    "message": "Waiting for text extraction",
-                },
-                "embedding": {"status": "pending", "message": "Waiting for chunking"},
-                "storage": {"status": "pending", "message": "Waiting for embeddings"},
-            },
-        }
-
         try:
-            # Stage 1: Text Extraction
-            logger.info(f"Starting text extraction for {filename}")
-            status["stages"]["extraction"]["status"] = "processing"
-            status["stages"]["extraction"][
-                "message"
-            ] = f"Extracting text from {self._get_document_type(filename).upper()} file"
+            # Validate file type
+            if not self._is_supported_file_type(filename):
+                return {
+                    "status": "error",
+                    "message": f"Unsupported file type: {Path(filename).suffix}",
+                    "filename": filename,
+                }
 
-            await log_to_websocket(
-                "info",
-                f"🔍 Starting text extraction from {self._get_document_type(filename).upper()}",
-            )
+            # Calculate hashes
+            file_hash = self._calculate_file_hash(file_content)
+            file_size = len(file_content)
+            file_data_hash = self._calculate_data_hash(file_content, file_size)
+
+            # Check for duplicates
+            existing_file = self.db_service.check_file_exists(file_data_hash)
+            if existing_file:
+                return {
+                    "status": "success",
+                    "message": "File already exists",
+                    "filename": filename,
+                    "file_id": existing_file["id"],
+                    "duplicate": True,
+                }
+
+            # Generate new filename
+            new_filename = self._generate_new_filename(file_hash, filename)
+
+            # Save file to hashed_files directory
+            file_path = Path("data/hashed_files") / new_filename
+            async with aiofiles.open(file_path, "wb") as f:
+                await f.write(file_content)
+
+            # Also save original file with original name in original_files directory
+            # Generate a unique original filename to handle duplicates
+            original_file_path = Path("data/original_files") / filename
+            counter = 1
+            while original_file_path.exists():
+                name_parts = Path(filename).stem, Path(filename).suffix
+                original_file_path = (
+                    Path("data/original_files")
+                    / f"{name_parts[0]}_{counter}{name_parts[1]}"
+                )
+                counter += 1
+
+            async with aiofiles.open(original_file_path, "wb") as f:
+                await f.write(file_content)
+
+            # Extract text content with OCR support
             text_content = await self._extract_text(
                 file_content, filename, content_type
             )
-            await log_to_websocket(
-                "success",
-                f"📄 Extracted {len(text_content)} characters from {filename}",
-            )
 
             if not text_content.strip():
-                status["stages"]["extraction"]["status"] = "failed"
-                status["stages"]["extraction"][
-                    "message"
-                ] = "No readable text found in file"
-                raise ValueError("No text content could be extracted from the file")
+                return {
+                    "status": "error",
+                    "message": "No text content could be extracted from the file",
+                    "filename": filename,
+                }
 
-            status["stages"]["extraction"]["status"] = "completed"
-            status["stages"]["extraction"][
-                "message"
-            ] = f"Extracted {len(text_content)} characters"
+            # Generate file ID first
+            file_id = str(uuid.uuid4())
 
-            # Stage 2: Text Chunking
-            logger.info(f"Starting text chunking for {filename}")
-            status["stages"]["chunking"]["status"] = "processing"
-            status["stages"]["chunking"][
-                "message"
-            ] = "Splitting text into semantic chunks"
+            # Create chunks for vector storage
+            chunks = self._create_chunks(text_content, filename, file_hash, file_id)
 
-            await log_to_websocket("info", f"✂️ Creating semantic chunks from text")
-            chunks = self._create_chunks(text_content, filename, document_id)
-            await log_to_websocket("success", f"📝 Created {len(chunks)} text chunks")
+            # Store in vector database
+            chunk_ids = await vector_service.add_documents(chunks)
 
-            if not chunks:
-                status["stages"]["chunking"]["status"] = "failed"
-                status["stages"]["chunking"][
-                    "message"
-                ] = "Failed to create chunks from text"
-                raise ValueError("No chunks could be created from the document")
-
-            status["stages"]["chunking"]["status"] = "completed"
-            status["stages"]["chunking"]["message"] = f"Created {len(chunks)} chunks"
-
-            # Stage 3: Embedding Generation & Vector Storage
-            logger.info(f"Starting embedding generation for {filename}")
-            status["stages"]["embedding"]["status"] = "processing"
-            status["stages"]["embedding"]["message"] = "Generating vector embeddings"
-
-            await log_to_websocket(
-                "info", f"🧠 Generating AI embeddings for {len(chunks)} chunks"
-            )
-            chunk_ids = vector_service.add_documents(
-                texts=[chunk.page_content for chunk in chunks],
-                metadatas=[chunk.metadata for chunk in chunks],
-                document_id=document_id,
-            )
-            await log_to_websocket(
-                "success", f"⚡ Generated embeddings and stored in vector database"
-            )
-
-            status["stages"]["embedding"]["status"] = "completed"
-            status["stages"]["embedding"][
-                "message"
-            ] = f"Generated embeddings for {len(chunk_ids)} chunks"
-
-            # Stage 4: Database Storage
-            logger.info(f"Storing metadata for {filename}")
-            status["stages"]["storage"]["status"] = "processing"
-            status["stages"]["storage"]["message"] = "Saving document metadata"
-
-            await log_to_websocket("info", f"💾 Saving document metadata to database")
-            self.db_service.save_document(
-                filename=filename,
-                content=(
-                    text_content[:1000] + "..."
-                    if len(text_content) > 1000
-                    else text_content
-                ),
-                doc_type=self._get_document_type(filename),
+            # Save file info to database with the pre-generated file_id
+            saved_file_id = self.db_service.save_file_info(
+                file_id=file_id,
+                full_filename=filename,
+                file_hash=file_hash,
+                new_filename=new_filename,
+                file_size=file_size,
+                file_data_hash=file_data_hash,
+                content_type=content_type,
                 metadata={
-                    "content_type": content_type,
-                    "file_size": len(file_content),
                     "chunk_count": len(chunks),
-                    "processing_date": datetime.now().isoformat(),
-                    "text_length": len(text_content),
+                    "chunk_ids": chunk_ids,
+                    "processing_time": (datetime.now() - start_time).total_seconds(),
+                    "ocr_used": self._was_ocr_used(filename, text_content),
+                    "original_file_path": str(original_file_path),
+                    "hashed_file_path": str(file_path),
                 },
             )
 
-            # Save full content to file
-            await self._save_file(file_content, document_id, filename)
-
-            status["stages"]["storage"]["status"] = "completed"
-            status["stages"]["storage"]["message"] = "Document metadata saved"
-
-            # Final status
             processing_time = (datetime.now() - start_time).total_seconds()
 
-            logger.info(
-                f"Successfully processed {filename} in {processing_time:.2f}s with {len(chunks)} chunks"
+            await log_to_websocket(
+                "info",
+                f"✅ Successfully processed {filename}",
+                {
+                    "chunks": len(chunks),
+                    "processing_time": processing_time,
+                    "file_size_mb": file_size / 1024 / 1024,
+                    "ocr_used": self._was_ocr_used(filename, text_content),
+                },
             )
 
             return {
-                "document_id": document_id,
-                "filename": filename,
-                "chunk_count": len(chunks),
-                "text_length": len(text_content),
-                "file_size": len(file_content),
-                "processing_time_seconds": round(processing_time, 2),
                 "status": "success",
-                "message": f"Document processed successfully with {len(chunks)} chunks in {processing_time:.1f}s",
-                "stages": status["stages"],
+                "message": "File processed successfully",
+                "filename": filename,
+                "file_id": file_id,
+                "chunk_count": len(chunks),
+                "processing_time_seconds": processing_time,
+                "file_size_mb": file_size / 1024 / 1024,
+                "new_filename": new_filename,
+                "ocr_used": self._was_ocr_used(filename, text_content),
             }
 
         except Exception as e:
-            # Update status with error information
-            processing_time = (datetime.now() - start_time).total_seconds()
-            error_message = str(e)
-
-            logger.error(f"Error processing document {filename}: {error_message}")
-
-            # Determine which stage failed
-            failed_stage = "extraction"
-            for stage_name, stage_info in status["stages"].items():
-                if stage_info["status"] == "processing":
-                    failed_stage = stage_name
-                    break
-                elif stage_info["status"] == "failed":
-                    failed_stage = stage_name
-                    break
+            logger.error(f"Error processing file {filename}: {str(e)}")
+            await log_to_websocket("error", f"❌ Error processing {filename}: {str(e)}")
 
             return {
-                "document_id": document_id,
-                "filename": filename,
-                "file_size": len(file_content),
-                "processing_time_seconds": round(processing_time, 2),
                 "status": "error",
-                "message": f"Failed during {failed_stage}: {error_message}",
-                "error_stage": failed_stage,
-                "error_details": error_message,
-                "stages": status["stages"],
+                "message": f"Processing failed: {str(e)}",
+                "filename": filename,
             }
+
+    def _was_ocr_used(self, filename: str, text_content: str) -> bool:
+        """Check if OCR was likely used based on filename and content"""
+        extension = Path(filename).suffix.lower()
+        is_image = extension in [".png", ".jpg", ".jpeg", ".heic", ".heif"]
+
+        # If it's an image and has substantial text content, OCR was likely used
+        if is_image and len(text_content.strip()) > 50:
+            return True
+
+        # Check for OCR indicators in text
+        ocr_indicators = ["[OCR]", "scanned", "image text", "extracted from image"]
+        return any(
+            indicator.lower() in text_content.lower() for indicator in ocr_indicators
+        )
 
     async def _extract_text(
         self, file_content: bytes, filename: str, content_type: str
     ) -> str:
-        """Extract text from different file types"""
-        try:
-            file_extension = Path(filename).suffix.lower()
+        """
+        Extract text from file based on type with OCR support
 
-            if file_extension == ".pdf" or "pdf" in content_type:
+        Args:
+            file_content: File content as bytes
+            filename: Original filename
+            content_type: MIME content type
+
+        Returns:
+            Extracted text content
+        """
+        file_extension = Path(filename).suffix.lower()
+
+        try:
+            if file_extension == ".pdf":
                 return await self._extract_from_pdf(file_content)
-            elif file_extension in [".docx", ".doc"] or "word" in content_type:
+            elif file_extension == ".docx":
                 return await self._extract_from_docx(file_content)
-            elif file_extension in [".txt", ".md"] or "text" in content_type:
-                return await self._extract_from_text(file_content)
-            elif file_extension in [".html", ".htm"]:
-                return await self._extract_from_html(file_content)
+            elif file_extension == ".pptx":
+                return await self._extract_from_pptx(file_content)
+            elif file_extension == ".xlsx":
+                return await self._extract_from_excel(file_content)
+            elif file_extension in [".png", ".jpg", ".jpeg", ".heic", ".heif"]:
+                return await self._extract_from_image(file_content, filename)
             else:
-                # Try as text file as fallback
-                return await self._extract_from_text(file_content)
+                raise ValueError(f"Unsupported file type: {file_extension}")
 
         except Exception as e:
-            logger.error(f"Error extracting text from {filename}: {e}")
+            logger.error(f"Error extracting text from {filename}: {str(e)}")
             raise
 
     async def _extract_from_pdf(self, file_content: bytes) -> str:
-        """Extract text from PDF file with better error handling"""
+        """Extract text from PDF file with OCR support for scanned pages"""
         try:
-            logger.info("Processing PDF file...")
-            await log_to_websocket(
-                "info", "📖 Opening PDF file and analyzing structure"
-            )
+            text_content = []
 
+            # Try PyMuPDF first for better handling
+            if PYMUPDF_AVAILABLE:
+                try:
+                    doc = fitz.open(stream=file_content, filetype="pdf")
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+
+                        # Try to extract text normally first
+                        page_text = page.get_text()
+
+                        # If no text found and OCR is available, try OCR
+                        if not page_text.strip() and OCR_AVAILABLE:
+                            await log_to_websocket(
+                                "info", f"🔍 Using OCR for page {page_num + 1}"
+                            )
+
+                            # Convert page to image
+                            pix = page.get_pixmap()
+                            img_data = pix.tobytes("png")
+
+                            # Perform OCR on the image
+                            img = Image.open(io.BytesIO(img_data))
+                            page_text = pytesseract.image_to_string(img)
+
+                            if page_text.strip():
+                                page_text = f"[OCR Page {page_num + 1}]\n{page_text}"
+
+                        if page_text.strip():
+                            text_content.append(f"[Page {page_num + 1}]\n{page_text}")
+
+                    doc.close()
+
+                    if text_content:
+                        return "\n\n".join(text_content)
+
+                except Exception as e:
+                    logger.warning(
+                        f"PyMuPDF extraction failed: {e}, falling back to PyPDF2"
+                    )
+
+            # Fallback to PyPDF2
             with suppress_pdf_warnings():
-                pdf_file = io.BytesIO(file_content)
-                pdf_reader = PyPDF2.PdfReader(pdf_file)
-
-                total_pages = len(pdf_reader.pages)
-                logger.info(f"PDF has {total_pages} pages")
-                await log_to_websocket("info", f"📄 Found {total_pages} pages in PDF")
-
-                text_content = []
-                successful_pages = 0
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
 
                 for page_num, page in enumerate(pdf_reader.pages):
                     try:
-                        if (
-                            page_num % 5 == 0 or page_num == 0
-                        ):  # Log every 5 pages or first page
-                            await log_to_websocket(
-                                "info",
-                                f"📃 Processing page {page_num + 1}/{total_pages}",
-                            )
-
                         page_text = page.extract_text()
                         if page_text.strip():
                             text_content.append(f"[Page {page_num + 1}]\n{page_text}")
-                            successful_pages += 1
-                    except Exception as page_error:
+                    except Exception as e:
                         logger.warning(
-                            f"Could not extract text from page {page_num + 1}: {page_error}"
-                        )
-                        await log_to_websocket(
-                            "warning", f"⚠️ Skipped page {page_num + 1} (unreadable)"
+                            f"Error extracting text from PDF page {page_num + 1}: {e}"
                         )
                         continue
-
-                logger.info(
-                    f"Successfully extracted text from {successful_pages}/{total_pages} pages"
-                )
-                await log_to_websocket(
-                    "success",
-                    f"✅ Extracted text from {successful_pages}/{total_pages} pages",
-                )
-
-                if not text_content:
-                    raise ValueError(
-                        f"Could not extract readable text from any of the {total_pages} pages"
-                    )
 
                 return "\n\n".join(text_content)
 
         except Exception as e:
-            logger.error(f"PDF extraction failed: {e}")
-            if "encrypted" in str(e).lower():
-                raise ValueError("PDF file is encrypted or password-protected")
-            elif "corrupt" in str(e).lower():
-                raise ValueError("PDF file appears to be corrupted")
-            else:
-                raise ValueError(f"Failed to extract text from PDF: {str(e)[:100]}")
+            logger.error(f"Error extracting text from PDF: {str(e)}")
+            raise
 
     async def _extract_from_docx(self, file_content: bytes) -> str:
-        """Extract text from DOCX file"""
+        """Extract text from DOCX file including embedded images"""
         try:
-            docx_file = io.BytesIO(file_content)
-            doc = DocxDocument(docx_file)
-
+            doc = DocxDocument(io.BytesIO(file_content))
             text_content = []
+
+            # Extract text from paragraphs
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
                     text_content.append(paragraph.text)
 
-            return "\n\n".join(text_content)
+            # Extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            row_text.append(cell.text.strip())
+                    if row_text:
+                        text_content.append(" | ".join(row_text))
+
+            # Extract text from embedded images if OCR is available
+            if OCR_AVAILABLE:
+                image_text = await self._extract_from_docx_images(doc)
+                if image_text:
+                    text_content.append("\n=== Embedded Images ===\n")
+                    text_content.append(image_text)
+
+            return "\n".join(text_content)
+
         except Exception as e:
-            logger.error(f"Error extracting DOCX text: {e}")
-            raise ValueError(f"Failed to extract text from DOCX: {e}")
-
-    async def _extract_from_text(self, file_content: bytes) -> str:
-        """Extract text from plain text file"""
-        try:
-            # Try different encodings
-            for encoding in ["utf-8", "utf-16", "latin-1", "cp1252"]:
-                try:
-                    return file_content.decode(encoding)
-                except UnicodeDecodeError:
-                    continue
-
-            # If all encodings fail, use utf-8 with error handling
-            return file_content.decode("utf-8", errors="replace")
-        except Exception as e:
-            logger.error(f"Error extracting text: {e}")
-            raise ValueError(f"Failed to extract text: {e}")
-
-    async def _extract_from_html(self, file_content: bytes) -> str:
-        """Extract text from HTML file"""
-        try:
-            html_content = file_content.decode("utf-8", errors="replace")
-            soup = BeautifulSoup(html_content, "html.parser")
-
-            # Remove script and style elements
-            for script in soup(["script", "style"]):
-                script.decompose()
-
-            # Get text and clean up
-            text = soup.get_text()
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = "\n".join(chunk for chunk in chunks if chunk)
-
-            return text
-        except Exception as e:
-            logger.error(f"Error extracting HTML text: {e}")
-            raise ValueError(f"Failed to extract text from HTML: {e}")
-
-    def _create_chunks(
-        self, text_content: str, filename: str, document_id: str
-    ) -> List[Document]:
-        """Create document chunks for vector storage"""
-        try:
-            # Create a LangChain Document
-            doc = Document(
-                page_content=text_content,
-                metadata={
-                    "filename": filename,
-                    "document_id": document_id,
-                    "doc_type": self._get_document_type(filename),
-                },
-            )
-
-            # Split into chunks
-            chunks = self.text_splitter.split_documents([doc])
-
-            # Add chunk-specific metadata
-            for i, chunk in enumerate(chunks):
-                chunk.metadata.update(
-                    {
-                        "chunk_index": i,
-                        "total_chunks": len(chunks),
-                        "chunk_id": f"{document_id}_chunk_{i}",
-                    }
-                )
-
-            return chunks
-        except Exception as e:
-            logger.error(f"Error creating chunks: {e}")
+            logger.error(f"Error extracting text from DOCX: {str(e)}")
             raise
 
-    def _get_document_type(self, filename: str) -> str:
-        """Determine document type from filename"""
-        extension = Path(filename).suffix.lower()
-        type_mapping = {
-            ".pdf": "pdf",
-            ".docx": "docx",
-            ".doc": "doc",
-            ".txt": "text",
-            ".md": "markdown",
-            ".html": "html",
-            ".htm": "html",
-        }
-        return type_mapping.get(extension, "unknown")
-
-    async def _save_file(self, file_content: bytes, document_id: str, filename: str):
-        """Save the original file to disk"""
+    async def _extract_from_docx_images(self, doc) -> str:
+        """Extract text from images embedded in DOCX using OCR"""
         try:
-            # Create data directory
-            data_dir = Path(settings.data_storage_path)
-            data_dir.mkdir(parents=True, exist_ok=True)
+            image_texts = []
 
-            # Save with document ID as filename to avoid conflicts
-            file_extension = Path(filename).suffix
-            save_path = data_dir / f"{document_id}{file_extension}"
+            # Extract images from the document
+            for rel in doc.part.rels.values():
+                if "image" in rel.target_ref:
+                    try:
+                        image_data = rel.target_part.blob
+                        img = Image.open(io.BytesIO(image_data))
 
-            async with aiofiles.open(save_path, "wb") as f:
-                await f.write(file_content)
+                        # Perform OCR on the image
+                        ocr_text = pytesseract.image_to_string(img)
+                        if ocr_text.strip():
+                            image_texts.append(
+                                f"[Embedded Image OCR]\n{ocr_text.strip()}"
+                            )
 
-            logger.info(f"Saved file {filename} to {save_path}")
+                    except Exception as e:
+                        logger.warning(f"Error processing embedded image: {e}")
+                        continue
+
+            return "\n\n".join(image_texts)
+
         except Exception as e:
-            logger.error(f"Error saving file {filename}: {e}")
-            # Don't raise here as the document processing was successful
+            logger.warning(f"Error extracting from DOCX images: {e}")
+            return ""
 
-    async def get_document_info(self, document_id: str) -> Optional[Dict[str, Any]]:
-        """Get information about a processed document"""
+    async def _extract_from_pptx(self, file_content: bytes) -> str:
+        """Extract text from PPTX file including embedded images"""
+        if not PPTX_AVAILABLE:
+            raise ImportError("python-pptx is not available")
+
         try:
-            # Get document metadata from database
-            documents = self.db_service.get_documents()
-            document = next(
-                (doc for doc in documents if doc["id"] == document_id), None
-            )
+            prs = Presentation(io.BytesIO(file_content))
+            text_content = []
 
-            if not document:
-                return None
+            for slide_num, slide in enumerate(prs.slides):
+                slide_text = [f"[Slide {slide_num + 1}]"]
 
-            # Get chunks from vector database
-            chunks = vector_service.get_document_chunks(document_id)
+                # Extract text from shapes
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        slide_text.append(shape.text.strip())
 
-            return {
-                "document_id": document_id,
-                "filename": document["filename"],
-                "doc_type": document["doc_type"],
-                "upload_date": document["upload_date"],
-                "chunk_count": len(chunks),
-                "chunks": chunks[:3] if chunks else [],  # First 3 chunks as preview
-                "metadata": document.get("metadata", {}),
-            }
+                # Extract text from embedded images if OCR is available
+                if OCR_AVAILABLE:
+                    image_text = await self._extract_from_pptx_images(slide)
+                    if image_text:
+                        slide_text.append(
+                            f"[Slide {slide_num + 1} Images]\n{image_text}"
+                        )
+
+                if len(slide_text) > 1:  # More than just the slide number
+                    text_content.append("\n".join(slide_text))
+
+            return "\n\n".join(text_content)
+
         except Exception as e:
-            logger.error(f"Error getting document info: {e}")
-            return None
+            logger.error(f"Error extracting text from PPTX: {str(e)}")
+            raise
 
-    async def delete_document(self, document_id: str) -> bool:
-        """Delete a document and all its chunks"""
+    async def _extract_from_pptx_images(self, slide) -> str:
+        """Extract text from images embedded in PPTX slide using OCR"""
         try:
-            # Delete from vector database
-            success = vector_service.delete_document(document_id)
+            image_texts = []
 
-            if success:
-                # Delete file from disk
-                data_dir = Path(settings.data_storage_path)
-                for file_path in data_dir.glob(f"{document_id}.*"):
-                    file_path.unlink()
+            for shape in slide.shapes:
+                if hasattr(shape, "image"):
+                    try:
+                        image_data = shape.image.blob
+                        img = Image.open(io.BytesIO(image_data))
 
-                logger.info(f"Deleted document {document_id}")
-                return True
+                        # Perform OCR on the image
+                        ocr_text = pytesseract.image_to_string(img)
+                        if ocr_text.strip():
+                            image_texts.append(f"[Slide Image OCR]\n{ocr_text.strip()}")
 
-            return False
+                    except Exception as e:
+                        logger.warning(f"Error processing slide image: {e}")
+                        continue
+
+            return "\n\n".join(image_texts)
+
         except Exception as e:
-            logger.error(f"Error deleting document {document_id}: {e}")
-            return False
+            logger.warning(f"Error extracting from PPTX images: {e}")
+            return ""
 
-    async def list_documents(self) -> List[Dict[str, Any]]:
-        """List all processed documents"""
+    async def _extract_from_excel(self, file_content: bytes) -> str:
+        """Extract text from Excel file"""
+        if not EXCEL_AVAILABLE:
+            raise ImportError("pandas/openpyxl is not available")
+
         try:
-            documents = self.db_service.get_documents()
+            # Try to read with pandas
+            df_dict = pd.read_excel(io.BytesIO(file_content), sheet_name=None)
+            text_content = []
 
-            # Add chunk count for each document
-            for doc in documents:
-                chunks = vector_service.get_document_chunks(doc["id"])
-                doc["chunk_count"] = len(chunks)
+            for sheet_name, df in df_dict.items():
+                if not df.empty:
+                    sheet_text = [f"[Sheet: {sheet_name}]"]
+
+                    # Add column headers
+                    if not df.columns.empty:
+                        sheet_text.append(
+                            "Headers: " + " | ".join(str(col) for col in df.columns)
+                        )
+
+                    # Add first few rows as sample
+                    for idx, row in df.head(10).iterrows():
+                        row_text = " | ".join(
+                            str(val) for val in row.values if pd.notna(val)
+                        )
+                        if row_text.strip():
+                            sheet_text.append(f"Row {idx + 1}: {row_text}")
+
+                    text_content.append("\n".join(sheet_text))
+
+            return "\n\n".join(text_content)
+
+        except Exception as e:
+            logger.error(f"Error extracting text from Excel: {str(e)}")
+            raise
+
+    async def _extract_from_image(self, file_content: bytes, filename: str) -> str:
+        """Extract text from image file using OCR"""
+        if not IMAGE_AVAILABLE:
+            raise ImportError("Pillow is not available")
+
+        try:
+            # Open image (supports HEIC if pillow-heif is available)
+            image = Image.open(io.BytesIO(file_content))
+
+            # Convert to RGB if necessary for OCR
+            if image.mode not in ["RGB", "L"]:
+                image = image.convert("RGB")
+
+            # Extract basic image metadata
+            metadata = [
+                f"[Image: {filename}]",
+                f"Format: {image.format}",
+                f"Size: {image.size[0]}x{image.size[1]} pixels",
+                f"Mode: {image.mode}",
+            ]
+
+            # Try to extract EXIF data if available
+            if hasattr(image, "_getexif") and image._getexif():
+                exif = image._getexif()
+                if exif:
+                    metadata.append("EXIF data available")
+
+            # Perform OCR if available
+            ocr_text = ""
+            if OCR_AVAILABLE:
+                try:
+                    await log_to_websocket("info", f"🔍 Performing OCR on {filename}")
+                    ocr_text = pytesseract.image_to_string(image)
+
+                    if ocr_text.strip():
+                        ocr_text = f"\n=== OCR Extracted Text ===\n{ocr_text.strip()}"
+                    else:
+                        ocr_text = "\n=== OCR: No text detected ==="
+
+                except Exception as e:
+                    logger.warning(f"OCR failed for {filename}: {e}")
+                    ocr_text = f"\n=== OCR failed: {str(e)} ==="
+            else:
+                ocr_text = "\n=== OCR not available ==="
+
+            return "\n".join(metadata) + ocr_text
+
+        except Exception as e:
+            logger.error(f"Error extracting metadata from image: {str(e)}")
+            raise
+
+    def _create_chunks(
+        self, text_content: str, filename: str, file_hash: str, document_id: str
+    ) -> List[Document]:
+        """
+        Create text chunks for vector storage
+
+        Args:
+            text_content: Full text content
+            filename: Original filename
+            file_hash: File hash for reference
+
+        Returns:
+            List of Document chunks
+        """
+        try:
+            chunks = self.text_splitter.split_text(text_content)
+
+            documents = []
+            for i, chunk in enumerate(chunks):
+                if chunk.strip():
+                    doc = Document(
+                        page_content=chunk,
+                        metadata={
+                            "source": filename,
+                            "file_hash": file_hash,
+                            "document_id": document_id,
+                            "chunk_index": i,
+                            "total_chunks": len(chunks),
+                            "chunk_id": f"{file_hash}_chunk_{i}",
+                        },
+                    )
+                    documents.append(doc)
 
             return documents
+
         except Exception as e:
-            logger.error(f"Error listing documents: {e}")
+            logger.error(f"Error creating chunks for {filename}: {str(e)}")
+            raise
+
+    async def get_document_info(self, file_id: str) -> Optional[Dict[str, Any]]:
+        """Get document information by file ID"""
+        try:
+            files = self.db_service.get_files()
+            for file in files:
+                if file["id"] == file_id:
+                    # Add file path information for preview
+                    file_info = file.copy()
+
+                    # Determine the file path based on storage structure
+                    original_path = Path("data/original_files") / file["full_filename"]
+                    hashed_path = Path("data/hashed_files") / file["new_filename"]
+
+                    # Prefer original file if it exists, otherwise use hashed file
+                    if original_path.exists():
+                        file_info["file_path"] = str(original_path)
+                    elif hashed_path.exists():
+                        file_info["file_path"] = str(hashed_path)
+                    else:
+                        logger.warning(
+                            f"File not found for document {file_id}: {file['full_filename']}"
+                        )
+                        file_info["file_path"] = None
+
+                    # Add metadata for preview endpoint compatibility
+                    if "metadata" not in file_info:
+                        file_info["metadata"] = {}
+
+                    file_info["metadata"]["filename"] = file["full_filename"]
+                    file_info["metadata"]["file_path"] = file_info["file_path"]
+                    file_info["metadata"]["content_type"] = file["content_type"]
+
+                    return file_info
+            return None
+        except Exception as e:
+            logger.error(f"Error getting document info: {str(e)}")
+            return None
+
+    async def list_documents(self) -> List[Dict[str, Any]]:
+        """List all uploaded documents"""
+        try:
+            return self.db_service.get_files()
+        except Exception as e:
+            logger.error(f"Error listing documents: {str(e)}")
+            return []
+
+    async def delete_document(self, file_id: str) -> bool:
+        """Delete a document"""
+        try:
+            # Get file info
+            file_info = await self.get_document_info(file_id)
+            if not file_info:
+                return False
+
+            # Delete from vector database
+            if "chunk_ids" in file_info.get("metadata", {}):
+                chunk_ids = file_info["metadata"]["chunk_ids"]
+                await vector_service.delete_documents(chunk_ids)
+
+            # Delete file from storage
+            file_path = Path("data/hashed_files") / file_info["new_filename"]
+            if file_path.exists():
+                file_path.unlink()
+
+            # Delete from database
+            return self.db_service.delete_file(file_id)
+
+        except Exception as e:
+            logger.error(f"Error deleting document: {str(e)}")
+            return False
+
+    async def search_documents(
+        self, query: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Search documents using vector similarity"""
+        try:
+            results = await vector_service.search(query, limit)
+            return results
+        except Exception as e:
+            logger.error(f"Error searching documents: {str(e)}")
             return []
 
 
-# Global document service instance
+# Create global instance
 document_service = DocumentService()

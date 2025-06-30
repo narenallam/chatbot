@@ -49,6 +49,21 @@ const StatusDot = styled.span<{ status: 'online' | 'offline' }>`
   box-shadow: 0 0 4px ${props => props.status === 'online' ? '#00ff0066' : '#ff444466'};
 `;
 
+const EnhancedStatusValue = styled.span`
+  color: #00ffff;
+  font-size: 0.7rem;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+`;
+
+const StatusSubtext = styled.span`
+  color: #888;
+  font-size: 0.6rem;
+  font-weight: normal;
+`;
+
 export const StatusPanel: React.FC<StatusPanelProps> = ({ status }) => {
   return (
     <PanelContainer>
@@ -69,24 +84,26 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({ status }) => {
       </StatusItem>
       
       <StatusItem>
-        <StatusDot status="online" />
-        <StatusLabel>Documents</StatusLabel>
-        <StatusValue>{status.documents}</StatusValue>
-      </StatusItem>
-
-      <StatusItem>
-        <StatusDot status="online" />
-        <StatusLabel>Uploaded</StatusLabel>
-        <StatusValue>{status.uploadedDocuments}</StatusValue>
+        <StatusDot status={status.isProcessing ? 'online' : 'offline'} />
+        <StatusLabel>Processing</StatusLabel>
+        <EnhancedStatusValue>
+          <span>
+            {status.cpuCores} Cores
+            {status.isProcessing && status.cpuUsage ? ` (${status.cpuUsage}%)` : ''}
+          </span>
+          {status.isProcessing && (
+            <StatusSubtext>Enhanced OCR Active</StatusSubtext>
+          )}
+        </EnhancedStatusValue>
       </StatusItem>
       
       <StatusItem>
-        <StatusDot status={status.isProcessing ? 'online' : 'offline'} />
-        <StatusLabel>CPU Cores</StatusLabel>
-        <StatusValue>
-          {status.cpuCores}
-          {status.isProcessing && status.cpuUsage ? ` (${status.cpuUsage}%)` : ''}
-        </StatusValue>
+        <StatusDot status={status.documents > 0 ? 'online' : 'offline'} />
+        <StatusLabel>Documents</StatusLabel>
+        <EnhancedStatusValue>
+          <span>{status.documents}</span>
+          <StatusSubtext>Enhanced Service</StatusSubtext>
+        </EnhancedStatusValue>
       </StatusItem>
     </PanelContainer>
   );

@@ -2,18 +2,27 @@
 Personal Assistant AI Chatbot - Main FastAPI Application
 """
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+# Fix HuggingFace tokenizers parallelism warning BEFORE any imports that might use tokenizers
+import os
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    Request,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
-import os
 import json
-import asyncio
 from typing import Dict, Set
 from datetime import datetime
 from dotenv import load_dotenv
 
-from app.api.routes import chat, documents, upload, generate
+from app.api.routes import chat, documents, upload, generate, admin
 from app.core.config import settings
 from app.services.database_service import DatabaseService
 
@@ -55,6 +64,20 @@ class ConnectionManager:
             self.disconnect(connection)
 
 
+# Cache control middleware
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        # Add no-cache headers for all API endpoints and static files
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Accel-Expires"] = "0"
+
+        return response
+
+
 # Global connection manager instance
 manager = ConnectionManager()
 
@@ -64,6 +87,9 @@ app = FastAPI(
     description="AI chatbot with document ingestion and RAG capabilities",
     version="1.0.0",
 )
+
+# Add no-cache middleware first
+app.add_middleware(NoCacheMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -132,19 +158,19 @@ async def broadcast_log(level: str, message: str, details: dict = None):
     await manager.broadcast(log_message)
 
 
-# Include API routes
+# Include API routes with proper organization
 app.include_router(chat.router, prefix="/api", tags=["chat"])
-app.include_router(documents.router, prefix="/api", tags=["documents"])
-app.include_router(upload.router, prefix="/api", tags=["upload"])
-app.include_router(generate.router, prefix="/api", tags=["generate"])
+app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
+app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
+app.include_router(generate.router, prefix="/api/generate", tags=["generate"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 # Initialize WebSocket logging for upload module and document services
 from app.api.routes import upload
-from app.services import document_service, ocr_document_service
+from app.services import document_service
 
 upload.broadcast_log_func = broadcast_log
 document_service.broadcast_log_func = broadcast_log
-ocr_document_service.broadcast_log_func = broadcast_log
 
 # Mount static files
 if os.path.exists("./data"):

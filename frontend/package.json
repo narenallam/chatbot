@@ -31,10 +31,11 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "start": "PORT=3000 GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts start",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "start:no-cache": "PORT=3000 BROWSER=none FAST_REFRESH=false WDS_SOCKET_PORT=0 react-scripts start"
   },
   "eslintConfig": {
     "extends": [
