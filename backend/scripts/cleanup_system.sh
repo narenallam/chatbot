@@ -148,19 +148,50 @@ if [[ "$SKIP_BACKUP" == false ]]; then
     echo ""
 fi
 
-# 1. Clear Vector Database
-echo "🗂️  Clearing Vector Database..."
-safe_remove_dir "./chroma_db" "ChromaDB vector database"
-safe_remove_dir "./vector_storage" "Vector storage directory"
-safe_remove_dir "./embeddings" "Embeddings cache"
+# 0. Kill any running backend processes to release database locks
+echo "🔄 Stopping Backend Processes..."
+if pgrep -f "uvicorn app.main:app" > /dev/null; then
+    echo "   🛑 Stopping uvicorn processes..."
+    pkill -f "uvicorn app.main:app" 2>/dev/null || true
+    sleep 2  # Wait for graceful shutdown
+fi
+
+if pgrep -f "python.*app.main" > /dev/null; then
+    echo "   🛑 Stopping python backend processes..."
+    pkill -f "python.*app.main" 2>/dev/null || true
+    sleep 1
+fi
+
+# Kill any multiprocessing workers
+if pgrep -f "loky-" > /dev/null; then
+    echo "   🛑 Stopping parallel processing workers..."
+    pkill -f "loky-" 2>/dev/null || true
+fi
+
+echo "   ✅ Backend processes stopped"
 echo ""
 
-# 2. Clear SQLite Database
+# 1. Clear Vector Database (ChromaDB in ./embeddings)
+echo "🗂️  Clearing Vector Database..."
+safe_remove_dir "./chroma_db" "Legacy ChromaDB directory"
+safe_remove_dir "./vector_storage" "Vector storage directory"
+safe_remove_dir "./embeddings" "ChromaDB embeddings directory (current)"
+echo ""
+
+# 2. Clear SQLite Database (including WAL files)
 echo "🗄️  Clearing SQLite Database..."
-safe_remove_file "./chatbot.db" "Main SQLite database"
+safe_remove_file "./chatbot.db" "Root SQLite database"
+safe_remove_file "./chatbot.db-wal" "SQLite WAL file"
+safe_remove_file "./chatbot.db-shm" "SQLite shared memory file"
+safe_remove_file "./data/chatbot.db" "Main SQLite database"
+safe_remove_file "./data/chatbot.db-wal" "Main SQLite WAL file"
+safe_remove_file "./data/chatbot.db-shm" "Main SQLite shared memory file"
 safe_remove_file "./database.db" "Alternative database file"
 safe_remove_file "./app.db" "App database file"
-safe_remove_file "./*.db" "Any other database files"
+# Use proper find command instead of glob pattern
+find . -maxdepth 2 -name "*.db" -type f -exec rm -f {} \; 2>/dev/null || true
+find . -maxdepth 2 -name "*.db-wal" -type f -exec rm -f {} \; 2>/dev/null || true
+find . -maxdepth 2 -name "*.db-shm" -type f -exec rm -f {} \; 2>/dev/null || true
 echo ""
 
 # 3. Clear File Storage
@@ -282,7 +313,19 @@ if [[ "$SKIP_BACKUP" == false ]] && [ -d "./cleanup_backup" ]; then
     echo ""
 fi
 
-# 10. Verification
+# 10. Force cleanup any remaining vector database data
+echo "🔧 Force Vector Database Reset..."
+if [ -d "./embeddings" ]; then
+    echo "   ⚠️  Embeddings directory still exists, forcing removal..."
+    rm -rf "./embeddings" 2>/dev/null || true
+fi
+
+# Force recreate embeddings directory
+mkdir -p "./embeddings" 2>/dev/null || true
+echo "   ✅ Vector database storage reset"
+echo ""
+
+# 11. Verification
 echo -e "${PURPLE}🔍 Verification...${NC}"
 echo "Checking critical preservation:"
 
@@ -308,11 +351,34 @@ else
     echo "   ℹ️  No test reports found"
 fi
 
-# Check databases are cleared
-if [ ! -f "./chatbot.db" ] && [ ! -d "./chroma_db" ]; then
-    echo "   ✅ Databases successfully cleared"
+# Check databases are completely cleared
+db_files_remaining=$(find . -maxdepth 2 -name "*.db*" -type f 2>/dev/null | wc -l)
+vector_dirs_remaining=0
+if [ -d "./embeddings" ]; then
+    vector_dirs_remaining=$(find ./embeddings -type f 2>/dev/null | wc -l)
+fi
+
+if [ "$db_files_remaining" -eq 0 ] && [ "$vector_dirs_remaining" -eq 0 ]; then
+    echo "   ✅ All databases and vector storage completely cleared"
 else
-    echo "   ⚠️  Some database files may still exist"
+    echo "   ⚠️  Warning: $db_files_remaining database files and $vector_dirs_remaining vector files may still exist"
+    if [[ "$QUIET_MODE" == false ]]; then
+        echo "   🔍 Remaining files:"
+        find . -maxdepth 2 -name "*.db*" -type f 2>/dev/null || true
+        find ./embeddings -type f 2>/dev/null || true
+    fi
+fi
+
+# Check data directory structure
+if [ -d "./data" ] && [ -d "./data/hashed_files" ] && [ -d "./data/original_files" ]; then
+    files_in_data=$(find ./data -type f 2>/dev/null | wc -l)
+    if [ "$files_in_data" -eq 0 ]; then
+        echo "   ✅ Data directory structure recreated and clean"
+    else
+        echo "   ⚠️  Warning: $files_in_data files still exist in data directory"
+    fi
+else
+    echo "   ⚠️  Data directory structure needs to be recreated"
 fi
 
 echo ""

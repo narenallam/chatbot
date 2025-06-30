@@ -113,7 +113,9 @@ async def upload_documents(files: List[UploadFile] = File(...)):
                 total_size += file_size
 
                 # Analyze file characteristics for processing strategy
-                is_large = file_size > 50 * 1024 * 1024  # 50MB+
+                is_large = (
+                    file_size > 10 * 1024 * 1024
+                )  # 10MB+ (lowered for better parallel processing)
                 is_pdf = file.filename.lower().endswith(".pdf")
 
                 if is_large:
@@ -163,11 +165,14 @@ async def upload_documents(files: List[UploadFile] = File(...)):
             }
 
         # Phase 2: Determine processing strategy
+        # Use parallel processing more aggressively for better user experience
         use_parallel = (
-            len(file_contents) > 1
-            or large_files_count > 0
-            or total_size > 100 * 1024 * 1024
-        )  # 100MB+
+            len(file_contents) > 1  # Always parallel for multiple files
+            and total_size > 5 * 1024 * 1024  # Only if total > 5MB to avoid overhead
+        ) or (
+            large_files_count > 0  # Always parallel for large files
+            or total_size > 50 * 1024 * 1024  # Parallel for 50MB+ total
+        )
 
         processing_strategy = "parallel" if use_parallel else "sequential"
         await safe_log_to_websocket(
