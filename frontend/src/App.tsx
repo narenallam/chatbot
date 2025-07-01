@@ -111,7 +111,7 @@ const AppContainer = styled.div`
 `;
 
 const Header = styled.header`
-  background: #0a0a0a;
+  background: #1A1A1A;
   padding: 15px 20px;
   border-bottom: 1px solid #333;
   z-index: 100;
@@ -122,10 +122,9 @@ const Header = styled.header`
 
 const Title = styled.h1`
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 48px;
   font-weight: 600;
-  color: #FF6EC7;
-  font-family: 'Moirai One', serif;
+  font-family: 'Bungee Spice', cursive, sans-serif;
   letter-spacing: 1px;
 `;
 
@@ -853,6 +852,11 @@ function App() {
       <Header>
         <Title>AI MATE</Title>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {contextInfo && (
+            <span style={{color: '#ffe066', fontSize: '0.95rem', fontWeight: 500, letterSpacing: 0.2, background: 'rgba(0,0,0,0.0)', padding: '0 8px'}}>
+              Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span>
+            </span>
+          )}
           <NewChatButton onClick={createNewConversation} title="New chat">
             <MessageSquare size={16} color="#39FF14" />
             New chat

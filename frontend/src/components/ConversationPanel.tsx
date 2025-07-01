@@ -258,14 +258,18 @@ const ConversationItem = styled.div<{ $isActive: boolean; $neonColor: string }>`
   margin-bottom: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: none;
+  box-shadow: ${props => props.$isActive ? `0 0 8px 1px ${props.$neonColor}40, 0 2px 12px #00000020` : 'none'};
+  z-index: ${props => props.$isActive ? 2 : 1};
+  transform: ${props => props.$isActive ? 'scale(1.03) translateY(-2px)' : 'none'};
   
   &:hover {
     background: ${props => 
-      `linear-gradient(135deg, ${props.$neonColor}20 0%, ${props.$neonColor}10 100%)`
+      `linear-gradient(135deg, ${props.$neonColor}10 0%, ${props.$neonColor}05 100%)`
     };
     border-color: ${props => `${props.$neonColor}70`};
-    box-shadow: none;
+    box-shadow: ${props => props.$isActive ? `0 0 10px 2px ${props.$neonColor}60, 0 3px 16px #00000030` : `0 0 4px 1px ${props.$neonColor}20`};
+    z-index: 3;
+    transform: ${props => props.$isActive ? 'scale(1.04) translateY(-3px)' : 'scale(1.01)'};
   }
 `;
 
@@ -334,12 +338,8 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const currentConversation = conversations.find(c => c.id === currentConversationId);
 
   return (
-    <PanelContainer>
-      {contextInfo && (
-        <div style={{padding: '8px 20px', color: '#ffe066', fontSize: '0.8rem', fontWeight: 500}}>
-          Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span> | Context: <span style={{color:'#fff'}}>{contextInfo.buffer_size}/{contextInfo.context_window}</span>
-        </div>
-      )}
+
+
       <HistoryContainer style={{paddingTop: 0}}>
         {groupedConversations.length === 0 ? (
           <EmptyState>
@@ -379,6 +379,6 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
           ))
         )}
       </HistoryContainer>
-    </PanelContainer>
+
   );
 }; 

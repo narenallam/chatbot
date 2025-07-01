@@ -620,9 +620,9 @@ const SnackbarStackContainer = styled.div`
 
 // Snackbar styled component (toast style)
 const Snackbar = styled.div<{ $visible: boolean }>`
-  background: #2a0000;
+  background: linear-gradient(90deg, #3a0d0d 0%, #2a0000 100%);
   color: #ffbdbd;
-  border: 1.25px solid #ff3b3b;
+  border: none;
   border-radius: 18px;
   padding: 10px 22px 10px 18px;
   font-size: 0.665rem;
@@ -646,13 +646,13 @@ const Snackbar = styled.div<{ $visible: boolean }>`
 // Yellow for 'Duplicate file!'
 const Highlight = styled.span`
   color: #ffe066;
-  font-weight: 600;
+  font-weight: 300;
 `;
 
 // File name span for white color (no bold)
 const FileName = styled.span`
   color: #fff;
-  font-weight: 400;
+  font-weight: 200;
 `;
 
 // Cancel button

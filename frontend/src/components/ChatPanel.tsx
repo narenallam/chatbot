@@ -33,6 +33,8 @@ const MessagesContainer = styled.div`
   overflow-y: auto;
   padding: 20px;
   scroll-behavior: smooth;
+  display: flex;
+  flex-direction: column;
   
   &::-webkit-scrollbar {
     width: 8px;
@@ -72,8 +74,10 @@ const MessageBubble = styled.div<{ $isUser: boolean }>`
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  margin: 8px 16px;
-  ${props => props.$isUser && 'flex-direction: row-reverse;'}
+  margin: ${props => props.$isUser ? '2px 0' : '8px 0'};
+  width: 100%;
+  flex-direction: ${props => props.$isUser ? 'row-reverse' : 'row'};
+  justify-content: ${props => props.$isUser ? 'flex-end' : 'flex-start'};
 `;
 
 const Avatar = styled.div<{ $isUser: boolean }>`
@@ -92,23 +96,26 @@ const Avatar = styled.div<{ $isUser: boolean }>`
 `;
 
 const MessageContent = styled.div<{ $isUser: boolean; $neonColor?: string }>`
-  max-width: 75%;
   background: linear-gradient(135deg, rgba(45, 45, 45, 0.7) 0%, rgba(35, 35, 35, 0.8) 100%);
-  border: 0.5px solidrgb(42, 42, 42);
-  border-radius: 17px;
+  border: 0.5px solid rgb(42, 42, 42);
+  border-radius: ${props => props.$isUser ? '22px 8px 22px 22px' : '17px'};
   overflow: hidden;
   color: #fff;
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: ${props => props.$isUser ? '0.95rem' : '0.9rem'};
+  line-height: ${props => props.$isUser ? '1.2' : '1.6'};
   word-wrap: break-word;
   box-shadow: none;
   position: relative;
   transition: all 0.2s ease;
-  
-  &:hover {
-    box-shadow: none;
-    border-color:rgb(70, 70, 70);
-  }
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin-left: ${props => props.$isUser ? 'auto' : '0'};
+  margin-right: ${props => props.$isUser ? '0' : 'auto'};
+  max-width: ${props => props.$isUser ? '60%' : '75%'};
+  min-width: 36px;
+  width: ${props => props.$isUser ? 'fit-content' : '75%'};
+  padding: ${props => props.$isUser ? '6px 16px' : '4px 22px 8px 22px'};
 `;
 
 const MessageCopyButton = styled.button`
@@ -169,7 +176,7 @@ const MessageCopyIcon = styled.div`
 `;
 
 const MessageBody = styled.div`
-  padding: 16px;
+  padding: 0;
 `;
 
 const MessageTime = styled.div`
@@ -456,6 +463,18 @@ const EmptyState = styled.div`
   color: #888;
   text-align: center;
   gap: 16px;
+  padding: 40px;
+`;
+
+const EmptyStateContent = styled.div`
+  background: transparent;
+  border-radius: 300px;
+  padding: 60px 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
 `;
 
 const EmptyIcon = styled.div`
@@ -820,14 +839,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
       <MessagesContainer>
         {messages.length === 0 ? (
           <EmptyState>
-            <EmptyIcon>
-              <Bot size={32} color="#ff1493" />
-            </EmptyIcon>
-            <EmptyText>Welcome to AI MATE!</EmptyText>
-            <EmptyHint>
-              Ask questions about your uploaded documents, request analysis, or chat about anything else. 
-              I can format responses with headings, lists, code blocks, and more.
-            </EmptyHint>
+            <EmptyStateContent>
+              <EmptyIcon>
+                <Bot size={32} color="#ff1493" />
+              </EmptyIcon>
+              <EmptyText>Welcome to AI MATE!</EmptyText>
+              <EmptyHint>
+                Ask questions about your uploaded documents, request analysis, coding or chat about anything else. 
+              </EmptyHint>
+            </EmptyStateContent>
           </EmptyState>
         ) : (
           messages.map((message) => (
@@ -840,7 +860,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                 $neonColor={message.neonColor}
               >
                 <MessageBody>
-                  <MarkdownContent>
+                  <MarkdownContent style={{padding: message.role === 'user' ? '0' : '16px 16px 0 16px'}}>
                     {message.role === 'user' ? (
                       <p>{message.content}</p>
                     ) : (
@@ -856,21 +876,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                     />
                   )}
                   
-                  <MessageTime>
-                    <MessageCopyButton 
-                      onClick={() => copyToClipboard(message.content)}
-                      style={{
-                        float: 'left',
-                        marginRight: '8px',
-                        marginTop: '0px'
-                      }}
-                      title="Copy message"
-                    >
-                      <MessageCopyIcon />
-                      Copy
-                    </MessageCopyButton>
-                    {formatTime(message.timestamp)}
-                  </MessageTime>
+                  {/* Only show copy button and time for assistant */}
+                  {message.role === 'assistant' && (
+                    <MessageTime style={{padding: '0 16px 12px 16px'}}>
+                      <MessageCopyButton 
+                        onClick={() => copyToClipboard(message.content)}
+                        style={{
+                          float: 'left',
+                          marginRight: '8px',
+                          marginTop: '0px'
+                        }}
+                        title="Copy message"
+                      >
+                        <MessageCopyIcon />
+                        Copy
+                      </MessageCopyButton>
+                      {formatTime(message.timestamp)}
+                    </MessageTime>
+                  )}
                 </MessageBody>
               </MessageContent>
             </MessageBubble>
@@ -931,18 +954,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
           onClose={handleClosePreview}
         />
       )}
-
-      {/* In the chat header, show context info if available */}
-      <Header>
-        <Title>
-          Chat
-          {contextInfo && (
-            <span style={{marginLeft: '12px', color: '#ffe066', fontSize: '0.8rem', fontWeight: 500}}>
-              Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span> | Context: <span style={{color:'#fff'}}>{contextInfo.buffer_size}/{contextInfo.context_window}</span>
-            </span>
-          )}
-        </Title>
-      </Header>
     </Container>
   );
 }; 
