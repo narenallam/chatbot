@@ -139,7 +139,7 @@ const DocumentsHeader = styled.div`
 const DocumentsTitle = styled.h3`
   color: #888888;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 500;
   margin: 0;
   display: flex;
   align-items: center;

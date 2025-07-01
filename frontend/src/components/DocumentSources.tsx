@@ -36,14 +36,21 @@ const SourcesList = styled.div`
   gap: 6px;
 `;
 
-const SourceItem = styled.div`
+const SourceItem = styled.button`
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border-radius: 17px;
   padding: 8px 10px;
   transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: block;
+  outline: none;
+  border-width: 1px;
+  border-style: solid;
   
-  &:hover {
+  &:hover, &:focus {
     background: rgba(255, 255, 255, 0.06);
     border-color: rgba(0, 255, 255, 0.3);
   }
@@ -132,21 +139,21 @@ export const DocumentSources: React.FC<DocumentSourcesProps> = ({
       
       <SourcesList>
         {uniqueSources.map((source, index) => (
-          <SourceItem key={`${source.document_id}-${index}`}>
+          <SourceItem
+            key={`${source.document_id}-${index}`}
+            onClick={() => handleDocumentClick(source.document_id, source.filename)}
+            title={`Click to preview ${source.filename}`}
+          >
             <SourceHeader>
-              <SourceFilename 
-                onClick={() => handleDocumentClick(source.document_id, source.filename)}
-                title={`Click to preview ${source.filename}`}
-              >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#00ffff', fontWeight: 300 }}>
                 <FileText size={12} />
                 {source.filename}
                 <ExternalLink size={10} />
-              </SourceFilename>
+              </span>
               <SourceScore>
                 {(source.similarity_score * 100).toFixed(1)}%
               </SourceScore>
             </SourceHeader>
-            
             <SourcePreview title={source.chunk_text}>
               {source.chunk_text}
             </SourcePreview>
