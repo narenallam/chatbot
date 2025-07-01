@@ -1,16 +1,11 @@
 # 🤖 AI MATE - Intelligent Document Chatbot
 
-[![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://python.org)
-[![React](https://img.shields.io/badge/React-18.2-blue.svg)](https://reactjs.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-green.svg)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://python.org) [![React](https://img.shields.io/badge/React-18.2-blue.svg)](https://reactjs.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.104-green.svg)](https://fastapi.tiangolo.com)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20AI-orange.svg)](https://ollama.ai)
 
 ---
 
 ## 🏗️ Architecture Diagram
-
-> **Note:** All diagrams use Mermaid. For best results on GitHub, enable dark mode or use a Mermaid renderer extension. All nodes use rounded rectangles and a consistent, colorful palette for both dark and light backgrounds.
-
 ```mermaid
 flowchart TD
   classDef rounded fill:#232946,stroke:#a7c7e7,stroke-width:2px,color:#fff,rx:12,ry:12;
@@ -247,11 +242,3 @@ npm start
 ```
 
 ---
-
-## 📚 Related Documentation
-- All documentation is now consolidated here. For scripts, tests, and architecture, see above sections.
-
----
-
-## 📝 License
-MIT 

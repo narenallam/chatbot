@@ -373,15 +373,6 @@ const DocumentMeta = styled.div`
   line-height: 1.3;
 `;
 
-const DocumentHash = styled.div`
-  color: #666;
-  font-size: 0.65rem;
-  font-family: "Noto Sans Mono", monospace !important;
-  font-weight: 300 !important;
-  margin-top: 2px;
-  opacity: 0.8;
-`;
-
 const DocumentError = styled.div`
   color: #ff6666;
   font-size: 0.7rem;
@@ -1320,44 +1311,13 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
                       </DocumentName>
                       <DocumentMeta>
                         {formatFileSize(doc.size || 0)} • {getFileTypeName(doc.name)} • {formatUploadDate(doc.uploadedAt)}
-                        {doc.newFileName && (
-                          <span> • Stored as: {doc.newFileName}</span>
-                        )}
                       </DocumentMeta>
-                      {doc.fileHash && (
-                        <DocumentHash>
-                          Hash: {doc.fileHash.substring(0, 16)}...
-                        </DocumentHash>
-                      )}
                       {doc.status === 'error' && doc.errorMessage && (
                         <DocumentError>
                           Error: {doc.errorMessage}
                         </DocumentError>
                       )}
                     </DocumentInfo>
-                    <div style={{marginLeft: 'auto', display: 'flex', gap: '8px'}}>
-                      <button
-                        disabled={!canPreview(doc) || doc.status !== 'ready'}
-                        title={canPreview(doc) && doc.status === 'ready' ? 'Show preview' : 'Preview not available'}
-                        onClick={canPreview(doc) && doc.status === 'ready' ? () => handleDocumentClick(doc) : undefined}
-                        style={{
-                          background: 'none',
-                          border: '1px solid #444',
-                          color: canPreview(doc) && doc.status === 'ready' ? '#00ffff' : '#888',
-                          borderRadius: '6px',
-                          padding: '6px 8px',
-                          cursor: canPreview(doc) && doc.status === 'ready' ? 'pointer' : 'not-allowed',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '0.8rem',
-                          transition: 'all 0.2s ease',
-                        }}
-                      >
-                        <Eye size={16} />
-                        Show preview
-                      </button>
-                    </div>
                   </DocumentHeader>
                 </DocumentItem>
               );
