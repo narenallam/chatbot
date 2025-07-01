@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import { Send, Bot, User, Upload } from 'lucide-react';
+import { Send, Bot, User, Upload, UserRound } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -480,26 +480,11 @@ const EmptyStateContent = styled.div`
 const EmptyIcon = styled.div`
   width: 80px;
   height: 80px;
-  border-radius: 50%;
+  border-radius: 20%;
   background: transparent;
-  border: 3px solid #ff1493;
-  box-shadow: 0 0 8px #ff149530, inset 0 0 8px #ff149315;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
-  animation: neonPulse 3s ease-in-out infinite alternate;
-  
-  @keyframes neonPulse {
-    from {
-      box-shadow: 0 0 8px #ff149530, inset 0 0 8px #ff149315;
-      border-color: #ff1493;
-    }
-    to {
-      box-shadow: 0 0 12px #ff149540, inset 0 0 12px #ff149320;
-      border-color: #ff69b4;
-    }
-  }
 `;
 
 const EmptyText = styled.div`
@@ -841,7 +826,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
           <EmptyState>
             <EmptyStateContent>
               <EmptyIcon>
-                <Bot size={32} color="#ff1493" />
+                <Bot size={40} color="#e0e0e0" />
               </EmptyIcon>
               <EmptyText>Welcome to AI MATE!</EmptyText>
               <EmptyHint>
@@ -853,7 +838,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
           messages.map((message) => (
             <MessageBubble key={message.id} $isUser={message.role === 'user'}>
               <Avatar $isUser={message.role === 'user'}>
-                {message.role === 'user' ? <User size={18} /> : <Bot size={18} />}
+                {message.role === 'user' ? <UserRound size={18} /> : <Bot size={18} />}
               </Avatar>
               <MessageContent 
                 $isUser={message.role === 'user'}

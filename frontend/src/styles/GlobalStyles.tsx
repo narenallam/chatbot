@@ -13,7 +13,7 @@ export const GlobalStyles = createGlobalStyle`
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     background: #1a1a1a;
-    color: #ffffff;
+    color: #e0e0e0;
     overflow: hidden;
     /* Enable ligatures globally for better typography */
     font-feature-settings: "liga" on, "calt" on;
@@ -71,6 +71,6 @@ export const GlobalStyles = createGlobalStyle`
   /* Selection styling */
   ::selection {
     background: rgba(0, 255, 255, 0.3);
-    color: #ffffff;
+    color: #e0e0e0;
   }
 `; 

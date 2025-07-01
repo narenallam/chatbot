@@ -122,10 +122,11 @@ const Header = styled.header`
 
 const Title = styled.h1`
   margin: 0;
-  font-size: 48px;
+  font-size: 38px;
   font-weight: 600;
-  font-family: 'Bungee Spice', cursive, sans-serif;
+  font-family: 'Bungee', cursive, sans-serif;
   letter-spacing: 1px;
+  color: #e0e0e0;
 `;
 
 const ConsoleToggle = styled.button`
@@ -652,8 +653,8 @@ function App() {
   const handleFileUpload = async (files: File[]): Promise<FileUploadResult[]> => {
     const results: FileUploadResult[] = [];
 
-    // Show console when upload starts
-    setIsConsoleVisible(true);
+    // Do not show console automatically on upload
+    // setIsConsoleVisible(true);
     
     // Set processing state and start CPU monitoring
     setSystemStatus(prev => ({ ...prev, isProcessing: true, cpuUsage: 0 }));
@@ -853,7 +854,7 @@ function App() {
         <Title>AI MATE</Title>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {contextInfo && (
-            <span style={{color: '#ffe066', fontSize: '0.95rem', fontWeight: 500, letterSpacing: 0.2, background: 'rgba(0,0,0,0.0)', padding: '0 8px'}}>
+            <span style={{color: '#ffe066', fontSize: '0.95rem', fontWeight: 400, letterSpacing: 0.2, background: 'rgba(0,0,0,0.0)', padding: '0 8px'}}>
               Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span>
             </span>
           )}
