@@ -149,6 +149,18 @@ class ChatService:
             memory.chat_memory.add_user_message(message)
             memory.chat_memory.add_ai_message(response)
 
+            # Save to database after every message
+            try:
+                database_service.save_conversation(
+                    session_id=conversation_id,  # Use conversation_id as session_id
+                    user_message=message,
+                    ai_response=response,
+                    sources=sources,
+                    metadata={"timestamp": datetime.now().isoformat()},
+                )
+            except Exception as db_exc:
+                logger.error(f"Failed to save conversation turn: {db_exc}")
+
             # Count tokens (approximate)
             tokens_used = self._estimate_tokens(message + response)
 
@@ -260,6 +272,18 @@ class ChatService:
             # Add messages to memory after completion
             memory.chat_memory.add_user_message(message)
             memory.chat_memory.add_ai_message(full_response)
+
+            # Save to database after every message
+            try:
+                database_service.save_conversation(
+                    session_id=conversation_id,  # Use conversation_id as session_id
+                    user_message=message,
+                    ai_response=full_response,
+                    sources=sources,
+                    metadata={"timestamp": datetime.now().isoformat()},
+                )
+            except Exception as db_exc:
+                logger.error(f"Failed to save conversation turn: {db_exc}")
 
             # Send final metadata
             yield {
@@ -617,6 +641,35 @@ Please create high-quality content that meets these requirements."""
         except Exception as e:
             logger.error(f"Error getting document ID by hash: {str(e)}")
             return "unknown"
+
+    def restore_conversation_context(self, conversation_id: str):
+        """
+        Restore in-memory context for a conversation from the database.
+        Args:
+            conversation_id: Conversation/session ID
+        """
+        try:
+            # Clear current memory
+            self.conversations[conversation_id] = ConversationBufferWindowMemory(
+                k=settings.max_chat_history, return_messages=True
+            )
+            memory = self.conversations[conversation_id]
+            # Load all messages from DB (in chronological order)
+            history = database_service.get_conversation_history(
+                conversation_id, limit=1000
+            )
+            for turn in reversed(
+                history
+            ):  # DB returns DESC, so reverse for chronological
+                memory.chat_memory.add_user_message(turn["user_message"])
+                memory.chat_memory.add_ai_message(turn["ai_response"])
+            logger.info(
+                f"Restored context for conversation {conversation_id} with {len(history)} turns."
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to restore context for conversation {conversation_id}: {e}"
+            )
 
 
 # Global chat service instance

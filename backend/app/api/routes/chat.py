@@ -138,3 +138,24 @@ async def clear_conversation_history(conversation_id: str):
         raise HTTPException(
             status_code=500, detail=f"Failed to clear conversation history: {str(e)}"
         )
+
+
+@router.post("/chat/restore/{conversation_id}")
+async def restore_conversation_context(conversation_id: str):
+    """
+    Restore in-memory context for a conversation from the database.
+    Args:
+        conversation_id: Conversation/session ID
+    Returns:
+        Success message
+    """
+    try:
+        chat_service.restore_conversation_context(conversation_id)
+        return {
+            "message": f"Context for conversation {conversation_id} restored successfully"
+        }
+    except Exception as e:
+        logger.error(f"Restore context error: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to restore context: {str(e)}"
+        )

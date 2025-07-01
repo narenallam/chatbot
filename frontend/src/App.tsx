@@ -355,7 +355,16 @@ function App() {
     // If no conversation exists, do nothing - let sendMessage handle creation
   };
 
-  const loadConversation = (conversationId: string) => {
+  const loadConversation = async (conversationId: string) => {
+    // Restore backend context for this conversation
+    try {
+      await fetch(`${BACKEND_URL}/api/chat/restore/${conversationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      console.warn('Failed to restore backend context:', err);
+    }
     const conversation = conversations.find(c => c.id === conversationId);
     if (conversation) {
       setCurrentConversationId(conversationId);

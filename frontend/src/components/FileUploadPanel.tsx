@@ -113,14 +113,13 @@ const DropzoneHint = styled.div`
   opacity: 0.8;
 `;
 
-const EnhancedDropzoneHint = styled.div`
+const DocumentsStyle = styled.div`
   color: #00ffff;
-  font-size: 0.7rem;
+  font-size: 0.9rem;
   margin-top: 8px;
   opacity: 0.9;
   font-weight: 500;
 `;
-
 const DocumentsSection = styled.div`
   flex: 1;
   display: flex;
@@ -1217,9 +1216,6 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
           <DropzoneHint>
             Supports PDF, DOCX, PPTX, XLSX, PNG, JPG, HEIC, MD, and major code files (C, C++, Java, JS, Python, Go, Rust, PHP, etc) • Max 500MB
           </DropzoneHint>
-          <EnhancedDropzoneHint>
-            Enhanced OCR processing for images • Duplicate detection enabled
-          </EnhancedDropzoneHint>
         </DropzoneContent>
       </DropzoneContainer>
 
@@ -1285,7 +1281,9 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
         <DocumentsHeader>
           <DocumentsTitle>
             <FileText size={16} />
+            <DocumentsStyle>
             Documents ({uploadedDocuments.length})
+            </DocumentsStyle>
           </DocumentsTitle>
           <RefreshButton onClick={handleRefresh} disabled={!onRefreshDocuments || isRefreshing}>
             {isRefreshing ? <Loader size={12} /> : <RotateCcw size={12} />}

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>README.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="%F0%9F%A4%96-ai-mate---intelligent-document-chatbot">🤖 AI MATE - Intelligent Document Chatbot</h1>
+<p><a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.13-blue.svg" alt="Python"></a> <a href="https://reactjs.org"><img src="https://img.shields.io/badge/React-18.2-blue.svg" alt="React"></a> <a href="https://fastapi.tiangolo.com"><img src="https://img.shields.io/badge/FastAPI-0.104-green.svg" alt="FastAPI"></a>
+<a href="https://ollama.ai"><img src="https://img.shields.io/badge/Ollama-Local AI-orange.svg" alt="Ollama"></a></p>
+<hr>
+<h2 id="%F0%9F%8F%97%EF%B8%8F-architecture-diagram">🏗️ Architecture Diagram</h2>
+<pre><code class="language-mermaid"><div class="mermaid">flowchart TD
+  classDef rounded fill:#232946,stroke:#a7c7e7,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef accent fill:#3b82f6,stroke:#fbbf24,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef ws fill:#10b981,stroke:#fbbf24,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef sse fill:#f59e42,stroke:#232946,stroke-width:2px,color:#fff,rx:12,ry:12;
+
+  U1["User"]:::rounded
+  F1["React App"]:::accent
+  SSE["SSE (Server-Sent Events)"]:::sse
+  WS["WebSocket<br/>Real-time"]:::ws
+  B1["FastAPI App"]:::accent
+  B2["Document Service"]:::rounded
+  B3["Vector DB Service"]:::rounded
+  B4["Multiprocessing Service"]:::rounded
+  B5["Database Service"]:::rounded
+  B6["RAG Logic"]:::rounded
+  S1["File Storage"]:::rounded
+  S2["Postgres DB"]:::rounded
+  S3["Vector DB (FAISS/Chroma)"]:::rounded
+
+  U1-->|Uploads/Queries|F1
+  F1-->|REST API|B1
+  F1-->|SSE|SSE
+  F1-->|WebSocket|WS
+  WS-->|Live Progress|B1
+  SSE-->|Streaming Chat|B1
+  B1-->|File Upload|B2
+  B2-->|Save/Extract|S1
+  B2-->|Text/Meta|B5
+  B2-->|Parallel OCR/Extract|B4
+  B4-->|Results|B2
+  B2-->|Embeddings|B3
+  B3-->|Vectors|S3
+  B6-->|Query+RAG|B3
+  B6-->|DB Lookup|B5
+  B6-->|Results|F1
+  B5-->|Meta|S2
+  S2-->|Meta|B5
+  S3-->|Vectors|B3
+  S1-->|Files|B2
+
+  %% Legends
+  subgraph Legend [Legend]
+    L1["Accent Service"]:::accent
+    L2["Rounded Node"]:::rounded
+    L3["WebSocket"]:::ws
+    L4["SSE"]:::sse
+  end
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%8C%9F-features">🌟 Features</h2>
+<ul>
+<li>Advanced document processing (PDF, DOCX, PPTX, XLSX, PNG, JPG, HEIC, code/text/markdown)</li>
+<li>OCR and parallel processing for large/scanned files</li>
+<li>Duplicate prevention, real-time progress, and enhanced metadata</li>
+<li>RAG (Retrieval Augmented Generation) with local AI (Ollama)</li>
+<li>Modern, responsive UI/UX with live status and preview</li>
+<li>Privacy-first: all processing is local, no external APIs</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%93%84-flow-diagrams">📄 Flow Diagrams</h2>
+<h3 id="real-time-upload-progress">Real-Time Upload Progress</h3>
+<pre><code class="language-mermaid"><div class="mermaid">flowchart TD
+  classDef rounded fill:#232946,stroke:#a7c7e7,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef ws fill:#10b981,stroke:#fbbf24,stroke-width:2px,color:#fff,rx:12,ry:12;
+  A["User Drops Files"]:::rounded --> B["Frontend: Progress UI"]:::rounded
+  B --> C["WebSocket Connection"]:::ws
+  C --> D["Backend: File Analysis"]:::rounded
+  D --> E["Progress: 10% - Analyzing..."]:::rounded
+  E --> F["Text Extraction"]:::rounded
+  F --> G["Progress: 60% - Extracting..."]:::rounded
+  G --> H["Chunking & Embeddings"]:::rounded
+  H --> I["Progress: 90% - Processing..."]:::rounded
+  I --> J["Complete: 100% - Ready!"]:::rounded
+</div></code></pre>
+<h3 id="rag-chat-flow">RAG Chat Flow</h3>
+<pre><code class="language-mermaid"><div class="mermaid">flowchart TD
+  classDef rounded fill:#232946,stroke:#a7c7e7,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef accent fill:#3b82f6,stroke:#fbbf24,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef ws fill:#10b981,stroke:#fbbf24,stroke-width:2px,color:#fff,rx:12,ry:12;
+  classDef sse fill:#f59e42,stroke:#232946,stroke-width:2px,color:#fff,rx:12,ry:12;
+  A["User Types Question"]:::rounded --> B["Frontend: /api/chat/stream"]:::accent
+  B-->|SSE|SSE["SSE (Server-Sent Events)"]:::sse
+  B-->|WebSocket|WS["WebSocket"]:::ws
+  B --> C["Chat Service: Query Processing"]:::rounded
+  C --> D["Query Embedding Generation"]:::rounded
+  D --> E["ChromaDB Similarity Search"]:::rounded
+  E --> F["Context Assembly"]:::rounded
+  F --> G["Prompt Engineering"]:::rounded
+  G --> H["Ollama LLM Processing"]:::rounded
+  H --> I["Streaming Response Generation"]:::rounded
+  I --> J["Source References Assembly"]:::rounded
+  J --> K["Frontend: Streaming Display"]:::accent
+</div></code></pre>
+<hr>
+<h2 id="%F0%9F%A7%A0-architecture-explanation">🧠 Architecture Explanation</h2>
+<ul>
+<li><strong>Layered, service-oriented backend</strong> (FastAPI, async, multiprocessing)</li>
+<li><strong>Frontend</strong>: React, real-time WebSocket progress, modern UI</li>
+<li><strong>Document Service</strong>: Handles all file types, duplicate detection, conversion, text extraction, chunking</li>
+<li><strong>Parallel Processing</strong>: Large files and OCR handled in parallel using all CPU cores</li>
+<li><strong>RAG Logic</strong>: Query embedding, vector search, context assembly, prompt engineering, LLM response, streaming output</li>
+<li><strong>Databases</strong>: ChromaDB (vectors), SQLite (metadata), file storage (originals, converted)</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%93%A6-file-handling--parallel-processing">📦 File Handling &amp; Parallel Processing</h2>
+<ul>
+<li><strong>Validation</strong>: File type, size, and duplicate check (SHA256 hash)</li>
+<li><strong>Conversion</strong>: Auto-PDF for office, PNG for HEIC, direct text for code/markdown</li>
+<li><strong>Extraction</strong>: Text extraction with fallback to OCR for images/scanned PDFs</li>
+<li><strong>Parallelism</strong>: Large files split and processed in parallel, with real-time progress</li>
+<li><strong>Stages</strong>: Validation → Duplicate → Conversion → Extraction → Chunking → Embeddings → Storage</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%A7%A9-file-processing-stages--embeddings">🧩 File Processing Stages &amp; Embeddings</h2>
+<ul>
+<li><strong>Stage 1</strong>: Validation &amp; duplicate detection</li>
+<li><strong>Stage 2</strong>: Conversion (PDF, PNG, etc.)</li>
+<li><strong>Stage 3</strong>: Text extraction (direct or OCR)</li>
+<li><strong>Stage 4</strong>: Chunking (semantic splitting)</li>
+<li><strong>Stage 5</strong>: Embedding generation (ChromaDB)</li>
+<li><strong>Stage 6</strong>: Metadata and file storage</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%94%8D-how-rag-works">🔍 How RAG Works</h2>
+<ul>
+<li><strong>User Query</strong> → Embedded (vector)</li>
+<li><strong>Vector Search</strong> → Top-K relevant chunks from ChromaDB</li>
+<li><strong>Context Assembly</strong> → Relevant text + metadata</li>
+<li><strong>Prompt Engineering</strong> → RAG context + user query</li>
+<li><strong>LLM (Ollama)</strong> → Generates answer, streams to frontend</li>
+<li><strong>Source Attribution</strong> → Shows which docs were used</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%97%84%EF%B8%8F-databases">🗄️ Databases</h2>
+<ul>
+<li><strong>ChromaDB</strong>: Vector storage for embeddings</li>
+<li><strong>SQLite</strong>: Metadata for files, conversations, sessions</li>
+<li><strong>File Storage</strong>: Originals, converted files, and extracted text</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%9B%A0%EF%B8%8F-rest-api-endpoints">🛠️ REST API Endpoints</h2>
+<ul>
+<li><code>POST /api/upload</code> — Upload a document</li>
+<li><code>GET /api/documents</code> — List all uploaded documents</li>
+<li><code>GET /api/documents/{id}</code> — Get document details</li>
+<li><code>DELETE /api/documents/{id}</code> — Delete a document</li>
+<li><code>POST /api/chat/stream</code> — Start a chat with RAG</li>
+<li><code>GET /api/status</code> — System status (backend, AI models)</li>
+<li><code>POST /api/admin/reset</code> — Reset/clean system</li>
+<li>(See backend code for full OpenAPI schema)</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%A7%AA-test-scripts">🧪 Test Scripts</h2>
+<ul>
+<li><strong>Comprehensive test suite</strong>: <code>backend/tests/test_comprehensive_system.py</code></li>
+<li><strong>Test runner</strong>: <code>backend/tests/run_tests.sh</code></li>
+<li><strong>Test data</strong>: <code>test_data/</code> folder with real files</li>
+<li><strong>Performance metrics</strong>: Throughput, memory, parallelism</li>
+<li><strong>How to run</strong>:<pre class="hljs"><code><div><span class="hljs-built_in">cd</span> backend
+./tests/run_tests.sh
+<span class="hljs-comment"># or</span>
+python tests/test_comprehensive_system.py
+</div></code></pre>
+</li>
+<li><strong>View results</strong>:<pre class="hljs"><code><div>python scripts/display_test_report.py
+</div></code></pre>
+</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%A7%B9-resetcleaning-scripts">🧹 Reset/Cleaning Scripts</h2>
+<ul>
+<li><strong>cleanup_system.sh</strong>: Safely wipes all data except .env and venv</li>
+<li><strong>reset_system_complete.sh</strong>: Legacy, full system reset</li>
+<li><strong>display_test_report.py</strong>: Beautiful test report viewer</li>
+<li><strong>How to use</strong>:<pre class="hljs"><code><div><span class="hljs-built_in">cd</span> backend
+./scripts/cleanup_system.sh --force
+<span class="hljs-comment"># or</span>
+./scripts/reset_system_complete.sh
+</div></code></pre>
+</li>
+</ul>
+<hr>
+<h2 id="%F0%9F%9A%80-project-setup">🚀 Project Setup</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>Python 3.13+</li>
+<li>Node.js 18+</li>
+<li>Ollama (for local AI)</li>
+</ul>
+<h3 id="1-setup-ollama--ai-models">1. Setup Ollama &amp; AI Models</h3>
+<pre class="hljs"><code><div>brew install ollama
+ollama serve
+ollama pull llama3:8b-instruct-q8_0
+</div></code></pre>
+<h3 id="2-backend-setup">2. Backend Setup</h3>
+<pre class="hljs"><code><div>git <span class="hljs-built_in">clone</span> &lt;repository-url&gt;
+<span class="hljs-built_in">cd</span> chatbot/backend
+python -m venv venv
+<span class="hljs-built_in">source</span> venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+</div></code></pre>
+<h3 id="3-frontend-setup">3. Frontend Setup</h3>
+<pre class="hljs"><code><div><span class="hljs-built_in">cd</span> ../frontend
+npm install
+npm start
+</div></code></pre>
+<hr>
+
+</body>
+</html>
