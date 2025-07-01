@@ -16,6 +16,7 @@ from app.models.schemas import (
     ErrorResponse,
 )
 from app.services.chat_service import chat_service
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -159,3 +160,31 @@ async def restore_conversation_context(conversation_id: str):
         raise HTTPException(
             status_code=500, detail=f"Failed to restore context: {str(e)}"
         )
+
+
+@router.get("/chat/context_info/{conversation_id}")
+async def get_context_info(conversation_id: str):
+    """
+    Get context info for a conversation: model name, context window size, buffer size.
+    """
+    # Determine model name
+    if settings.llm_provider == "ollama":
+        model_name = settings.ollama_model
+    elif settings.llm_provider == "openai":
+        model_name = settings.openai_model
+    else:
+        model_name = "unknown"
+    # Context window size
+    context_window = settings.max_chat_history
+    # Buffer size (number of messages in memory)
+    buffer_size = 0
+    try:
+        memory = chat_service._get_conversation_memory(conversation_id)
+        buffer_size = len(memory.chat_memory.messages)
+    except Exception:
+        buffer_size = 0
+    return {
+        "model_name": model_name,
+        "context_window": context_window,
+        "buffer_size": buffer_size,
+    }

@@ -238,6 +238,7 @@ function App() {
   const [fileUploadCallback, setFileUploadCallback] = useState<((file: File, result: any) => void) | null>(null);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
+  const [contextInfo, setContextInfo] = useState<{model_name: string, context_window: number, buffer_size: number} | null>(null);
 
   // Add cache busting utility
   const addCacheBuster = (url: string): string => {
@@ -823,6 +824,28 @@ function App() {
     loadDocumentsFromBackend();
   }, []);
 
+  // Fetch context info when currentConversationId changes
+  useEffect(() => {
+    const fetchContextInfo = async () => {
+      if (!currentConversationId) {
+        setContextInfo(null);
+        return;
+      }
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/chat/context_info/${currentConversationId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setContextInfo(data);
+        } else {
+          setContextInfo(null);
+        }
+      } catch {
+        setContextInfo(null);
+      }
+    };
+    fetchContextInfo();
+  }, [currentConversationId]);
+
   return (
     <AppContainer>
       <GlobalStyles />
@@ -866,6 +889,7 @@ function App() {
               onSendMessage={sendMessage}
               onFileUpload={handleFileUpload}
               isLoading={false}
+              contextInfo={contextInfo}
             />
           </PanelContainer>
           
@@ -878,6 +902,7 @@ function App() {
               onLoadConversation={loadConversation}
               onNewConversation={() => {}}
               onClearChat={clearChat}
+              contextInfo={contextInfo}
             />
           </PanelContainer>
         </PanelGroup>

@@ -15,6 +15,7 @@ interface ChatPanelProps {
   onSendMessage: (message: string) => void;
   onFileUpload: (files: File[]) => Promise<any>;
   isLoading: boolean;
+  contextInfo?: { model_name: string; context_window: number; buffer_size: number } | null;
 }
 
 const Container = styled.div`
@@ -109,8 +110,6 @@ const MessageContent = styled.div<{ $isUser: boolean; $neonColor?: string }>`
     border-color:rgb(70, 70, 70);
   }
 `;
-
-
 
 const MessageCopyButton = styled.button`
   background: linear-gradient(135deg, rgba(35, 35, 40, 0.7) 0%, rgba(25, 25, 30, 0.8) 100%);
@@ -598,7 +597,7 @@ const CopyIcon = styled.div`
   }
 `;
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onFileUpload, isLoading }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onFileUpload, isLoading, contextInfo }) => {
   console.log('🎯 ChatPanel received messages:', messages.length, messages);
   
   const [inputValue, setInputValue] = useState('');
@@ -932,6 +931,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
           onClose={handleClosePreview}
         />
       )}
+
+      {/* In the chat header, show context info if available */}
+      <Header>
+        <Title>
+          Chat
+          {contextInfo && (
+            <span style={{marginLeft: '12px', color: '#ffe066', fontSize: '0.8rem', fontWeight: 500}}>
+              Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span> | Context: <span style={{color:'#fff'}}>{contextInfo.buffer_size}/{contextInfo.context_window}</span>
+            </span>
+          )}
+        </Title>
+      </Header>
     </Container>
   );
 }; 

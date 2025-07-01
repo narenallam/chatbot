@@ -24,6 +24,7 @@ interface ConversationPanelProps {
   onLoadConversation: (conversationId: string) => void;
   onNewConversation: () => void;
   onClearChat: () => void;
+  contextInfo?: { model_name: string; context_window: number; buffer_size: number } | null;
 }
 
 const PanelContainer = styled.div`
@@ -286,7 +287,8 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
   currentConversationId, 
   onLoadConversation, 
   onNewConversation, 
-  onClearChat 
+  onClearChat, 
+  contextInfo
 }) => {
   const groupConversationsByTime = () => {
     const groups: { [key: string]: Conversation[] } = {};
@@ -333,6 +335,11 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
 
   return (
     <PanelContainer>
+      {contextInfo && (
+        <div style={{padding: '8px 20px', color: '#ffe066', fontSize: '0.8rem', fontWeight: 500}}>
+          Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span> | Context: <span style={{color:'#fff'}}>{contextInfo.buffer_size}/{contextInfo.context_window}</span>
+        </div>
+      )}
       <HistoryContainer style={{paddingTop: 0}}>
         {groupedConversations.length === 0 ? (
           <EmptyState>
@@ -361,6 +368,11 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
                       {formatTime(conversation.updatedAt)}
                     </TimeStamp>
                   </HistoryMeta>
+                  {conversation.id === currentConversationId && contextInfo && (
+                    <div style={{marginTop: '4px', color: '#ffe066', fontSize: '0.7rem'}}>
+                      Context: {contextInfo.buffer_size}/{contextInfo.context_window}
+                    </div>
+                  )}
                 </ConversationItem>
               ))}
             </div>
