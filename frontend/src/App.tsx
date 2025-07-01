@@ -771,6 +771,28 @@ function App() {
     return results;
   };
 
+  // Add logToConsole function for logging to Console
+  const logToConsole = (message: string, level: string = 'error') => {
+    // Send log to backend WebSocket for Console (if available)
+    // Or, if Console supports a state update, use that
+    // Here, we send to the backend WebSocket endpoint
+    try {
+      const ws = new WebSocket('ws://localhost:8000/ws/logs');
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'log',
+          level,
+          message,
+          timestamp: new Date().toISOString(),
+        }));
+        ws.close();
+      };
+    } catch (e) {
+      // Fallback: log to browser console
+      console.error('Console log failed:', e, message);
+    }
+  };
+
   // Check system status on mount and periodically
   // Load data on component mount
   useEffect(() => {
@@ -832,6 +854,7 @@ function App() {
               onRegisterCallback={setFileUploadCallback}
               uploadedDocuments={uploadedDocuments}
               onRefreshDocuments={refreshDocuments}
+              logToConsole={logToConsole}
             />
           </PanelContainer>
           

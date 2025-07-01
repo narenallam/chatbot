@@ -37,6 +37,7 @@ interface FileUploadPanelProps {
   onRegisterCallback?: (callback: (file: File, result: any) => void) => void;
   uploadedDocuments?: UploadedDocument[];
   onRefreshDocuments?: () => Promise<void>;
+  logToConsole?: (message: string, level?: string) => void;
 }
 
 const PanelContainer = styled.div`
@@ -603,10 +604,89 @@ const DuplicateNotification = styled.div`
   font-size: 0.95rem;
 `;
 
+// Snackbar stack container for toast style
+const SnackbarStackContainer = styled.div`
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 2000;
+  pointer-events: none;
+`;
+
+// Snackbar styled component (toast style)
+const Snackbar = styled.div<{ $visible: boolean }>`
+  background: #2a0000;
+  color: #ffbdbd;
+  border: 1.25px solid #ff3b3b;
+  border-radius: 18px;
+  padding: 10px 22px 10px 18px;
+  font-size: 0.665rem;
+  font-weight: 400;
+  box-shadow: 0 4px 24px #00000040;
+  opacity: ${props => props.$visible ? 1 : 0};
+  min-width: 220px;
+  max-width: 900px;
+  width: fit-content;
+  height: fit-content;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  word-break: break-word;
+  white-space: normal;
+  margin: 0 auto;
+  pointer-events: auto;
+`;
+
+// Yellow for 'Duplicate file!'
+const Highlight = styled.span`
+  color: #ffe066;
+  font-weight: 600;
+`;
+
+// File name span for white color (no bold)
+const FileName = styled.span`
+  color: #fff;
+  font-weight: 400;
+`;
+
+// Cancel button
+const SnackbarClose = styled.button`
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.3rem;
+  margin-left: 18px;
+  cursor: pointer;
+  padding: 0 6px;
+  border-radius: 50%;
+  transition: background 0.2s;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  &:hover {
+    background: #ff3b3b33;
+  }
+`;
+
+// Utility: Compute SHA-256 hash of a File
+async function computeSHA256(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', arrayBuffer);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({ 
   onFileUpload,
   uploadedDocuments = [],
-  onRefreshDocuments
+  onRefreshDocuments,
+  logToConsole
 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<UploadedDocument | null>(null);
@@ -616,6 +696,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
   const [previewStates, setPreviewStates] = useState<Map<string, { loading: boolean; error: string | null; url: string | null }>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
   const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
+  const [snackbarStack, setSnackbarStack] = useState<{ id: number, message: React.ReactNode }[]>([]);
 
   // WebSocket connection for real-time progress
   useEffect(() => {
@@ -806,55 +887,59 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
     }
   };
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (!acceptedFiles || acceptedFiles.length === 0) {
-      return;
+  const showSnackbar = (message: React.ReactNode) => {
+    setSnackbarStack(stack => [...stack, { id: Date.now() + Math.random(), message }]);
+  };
+
+  const handleDrop = useCallback(async (acceptedFiles: File[]) => {
+    const nonDuplicateFiles: File[] = [];
+    for (const file of acceptedFiles) {
+      // Step 1: Check name+size
+      const nameSizeDuplicate = uploadedDocuments.find(
+        doc => doc.name === file.name && doc.size === file.size
+      );
+      if (nameSizeDuplicate) {
+        const msg = <span><Highlight>Duplicate file!</Highlight> <FileName>"{file.name}"</FileName></span>;
+        showSnackbar(msg);
+        logToConsole && logToConsole(`Duplicate file: "${file.name}"`, 'error');
+        continue;
+      }
+      // Step 2: Check hash
+      const fileHash = await computeSHA256(file);
+      const hashDuplicate = uploadedDocuments.find(
+        doc => doc.fileHash === fileHash
+      );
+      if (hashDuplicate) {
+        const msg = <span><Highlight>Duplicate file!</Highlight> <FileName>"{file.name}"</FileName> == <FileName>"{hashDuplicate.name}"</FileName></span>;
+        showSnackbar(msg);
+        logToConsole && logToConsole(`Duplicate file! "${file.name}" == "${hashDuplicate.name}"`, 'error');
+        continue;
+      }
+      nonDuplicateFiles.push(file);
     }
-
-    setDuplicateFiles([]); // Reset duplicates on new upload
-    setIsUploading(true);
-    const initialProgress = acceptedFiles.map(file => ({
-      filename: file.name,
-      size: file.size,
-      status: 'queued' as const,
-      progress: 0,
-      currentStage: 'Queued for upload...',
-      startTime: new Date()
-    }));
-    setFileProgressList(initialProgress);
-
-    try {
-      // Await upload and check for duplicates in the response
-      const results = await onFileUpload(acceptedFiles);
+    if (nonDuplicateFiles.length > 0) {
+      const results = await onFileUpload(nonDuplicateFiles);
       if (Array.isArray(results)) {
-        const duplicates: string[] = [];
-        results.forEach((result, idx) => {
-          if (result && result.duplicate) {
-            duplicates.push(acceptedFiles[idx].name);
-            setFileProgressList(prev => prev.map(f =>
-              f.filename === acceptedFiles[idx].name
-                ? { ...f, status: 'completed', currentStage: 'Duplicate file (not uploaded again)' }
-                : f
-            ));
+        results.forEach(result => {
+          if (result.status === 'duplicate') {
+            // Backend duplicate: try to find which file matches by hash
+            const backendHashDuplicate = uploadedDocuments.find(
+              doc => doc.fileHash === result.fileHash
+            );
+            if (backendHashDuplicate) {
+              const msg = <span><Highlight>Duplicate file!</Highlight> <FileName>"{result.name}"</FileName> == <FileName>"{backendHashDuplicate.name}"</FileName></span>;
+              showSnackbar(msg);
+              logToConsole && logToConsole(`Duplicate file! "${result.name}" == "${backendHashDuplicate.name}"`, 'error');
+            } else {
+              const msg = <span><Highlight>Duplicate file!</Highlight> <FileName>"{result.name}"</FileName></span>;
+              showSnackbar(msg);
+              logToConsole && logToConsole(`Duplicate file: "${result.name}"`, 'error');
+            }
           }
         });
-        if (duplicates.length > 0) {
-          setDuplicateFiles(duplicates);
-        }
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      setFileProgressList(prev =>
-        prev.map(f => ({
-          ...f,
-          status: 'error',
-          currentStage: 'Upload failed',
-          error: error instanceof Error ? error.message : 'Upload failed',
-          endTime: new Date()
-        }))
-      );
     }
-  }, [onFileUpload]);
+  }, [uploadedDocuments, onFileUpload, logToConsole]);
 
   const handleRefresh = async () => {
     if (!onRefreshDocuments || isRefreshing) return;
@@ -870,7 +955,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+    onDrop: handleDrop,
     accept: {
       // Enhanced document service supported file types
       'application/pdf': ['.pdf'],
@@ -906,7 +991,8 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
       'application/x-toml': ['.toml'],
       'application/x-yaml': ['.yaml', '.yml']
     },
-    multiple: true
+    multiple: true,
+    noClick: false,
   });
 
   const formatFileSize = (bytes: number): string => {
@@ -1201,6 +1287,10 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
     return ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff'].includes(ext);
   };
 
+  const closeSnackbar = (id: number) => {
+    setSnackbarStack(stack => stack.filter(snack => snack.id !== id));
+  };
+
   return (
     <PanelContainer>
       <DropzoneContainer {...getRootProps()} $isDragActive={isDragActive}>
@@ -1357,6 +1447,16 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
             : `Some files already exist and were not uploaded again: ${duplicateFiles.join(', ')}`}
         </DuplicateNotification>
       )}
+
+      {/* Render stacked Snackbars vertically */}
+      <SnackbarStackContainer>
+        {snackbarStack.map(snack => (
+          <Snackbar key={snack.id} $visible={true}>
+            {snack.message}
+            <SnackbarClose onClick={() => closeSnackbar(snack.id)} aria-label="Close">×</SnackbarClose>
+          </Snackbar>
+        ))}
+      </SnackbarStackContainer>
     </PanelContainer>
   );
 }; 

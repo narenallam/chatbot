@@ -6,6 +6,7 @@
 ---
 
 ## 🏗️ Architecture Diagram
+
 ```mermaid
 flowchart TD
   classDef rounded fill:#232946,stroke:#a7c7e7,stroke-width:2px,color:#fff,rx:12,ry:12;
