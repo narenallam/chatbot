@@ -112,15 +112,28 @@ class ChatService:
             # Get or create conversation memory
             memory = self._get_conversation_memory(conversation_id)
 
-            # Retrieve relevant context if requested
+            # Retrieve relevant context based on search requirements
             context_docs = []
             sources = []
-            if use_context:
-                logger.info("Retrieving context documents...")
+
+            # Determine search mode based on parameters
+            if use_context and include_web_search:
+                search_mode = "hybrid"
+            elif use_context and not include_web_search:
+                search_mode = "documents"
+            elif not use_context and include_web_search:
+                search_mode = "web"
+            else:
+                search_mode = "hybrid"  # fallback
+
+            # Always retrieve context for web search or document search
+            if use_context or include_web_search:
+                logger.info(f"Retrieving context documents in {search_mode} mode...")
                 context_docs = await self._retrieve_context(
                     message,
                     include_web_search=include_web_search,
                     selected_search_engine=selected_search_engine,
+                    search_mode=search_mode,
                 )
                 logger.info(f"Retrieved {len(context_docs)} context documents")
 
@@ -250,15 +263,30 @@ class ChatService:
             # Get or create conversation memory
             memory = self._get_conversation_memory(conversation_id)
 
-            # Retrieve relevant context if requested
+            # Retrieve relevant context based on search requirements
             context_docs = []
             sources = []
-            if use_context:
-                logger.info("STREAM: Retrieving context documents...")
+
+            # Determine search mode based on parameters
+            if use_context and include_web_search:
+                search_mode = "hybrid"
+            elif use_context and not include_web_search:
+                search_mode = "documents"
+            elif not use_context and include_web_search:
+                search_mode = "web"
+            else:
+                search_mode = "hybrid"  # fallback
+
+            # Always retrieve context for web search or document search
+            if use_context or include_web_search:
+                logger.info(
+                    f"STREAM: Retrieving context documents in {search_mode} mode..."
+                )
                 context_docs = await self._retrieve_context(
                     message,
                     include_web_search=include_web_search,
                     selected_search_engine=selected_search_engine,
+                    search_mode=search_mode,
                 )
                 logger.info(f"STREAM: Retrieved {len(context_docs)} context documents")
 
@@ -385,6 +413,7 @@ class ChatService:
         n_results: int = 5,
         include_web_search: bool = True,
         selected_search_engine: Optional[str] = None,
+        search_mode: str = "hybrid",  # "documents", "web", or "hybrid"
     ) -> List[Dict[str, Any]]:
         """
         Retrieve relevant context documents for the query
@@ -397,17 +426,24 @@ class ChatService:
         Returns:
             List of relevant documents
         """
-        try:
-            # Use document service directly for document search (more reliable than AI Service Manager)
-            from app.services.document_service import document_service
 
-            # Get document results using the same service as /api/documents/search
-            document_results = await document_service.search_documents(
-                query, limit=n_results
-            )
-            logger.info(
-                f"Document service returned {len(document_results)} document results"
-            )
+        try:
+            # Use document service directly for document search
+            document_results = []
+
+            # Only search documents if not in web-only mode
+            if search_mode != "web":
+                from app.services.document_service import document_service
+
+                # Get document results using the same service as /api/documents/search
+                document_results = await document_service.search_documents(
+                    query, limit=n_results
+                )
+                logger.info(
+                    f"Document service returned {len(document_results)} document results"
+                )
+            else:
+                logger.info("Skipping document search for web-only mode")
 
             # Convert document results to legacy format
             legacy_results = []
@@ -432,31 +468,100 @@ class ChatService:
                 )
 
             # Add web search results if AI Service Manager is available and web search is enabled
+            logger.debug(
+                f"Web search check: AI Manager initialized={ai_service_manager.is_initialized}, include_web_search={include_web_search}"
+            )
+
+            # Initialize AI Service Manager if not already initialized
+            if not ai_service_manager.is_initialized and include_web_search:
+                logger.info("Initializing AI Service Manager for web search...")
+                try:
+                    from app.core.startup import initialize_ai_services
+
+                    initialization_result = await initialize_ai_services()
+                    logger.info(
+                        f"AI Service Manager initialization: {initialization_result}"
+                    )
+                except Exception as init_e:
+                    logger.warning(f"Failed to initialize AI Service Manager: {init_e}")
             if ai_service_manager.is_initialized and include_web_search:
                 try:
+                    logger.info(
+                        f"Performing web search: query='{query}', engine='{selected_search_engine}'"
+                    )
                     web_search_results = await ai_service_manager.search(
                         query=query,
                         strategy=SearchStrategy.AUTO,
-                        k=n_results // 2,  # Split results between documents and web
+                        k=(
+                            max(8, n_results)
+                            if search_mode == "web"
+                            else n_results // 2
+                        ),  # More results for web-only mode
                         include_web_search=True,
                         selected_search_engine=selected_search_engine,
                     )
 
-                    # Add web results to legacy format
-                    for result in web_search_results:
+                    logger.info(
+                        f"Web search returned {len(web_search_results)} total results"
+                    )
+
+                    # Add web results to legacy format with enhanced content processing
+                    web_results_added = 0
+                    for i, result in enumerate(web_search_results):
+                        logger.debug(
+                            f"Processing result {i}: search_type='{result.search_type}', content_length={len(result.content) if result.content else 0}"
+                        )
                         if result.search_type in ["web_search", "hybrid_web"]:
+                            # Enhanced content processing for web search results
+                            content = result.content or ""
+                            snippet = result.metadata.get("snippet", "")
+                            description = result.metadata.get("description", "")
+
+                            # Combine content sources for more comprehensive information
+                            combined_content = []
+                            if content:
+                                combined_content.append(content)
+                            if snippet and snippet not in content:
+                                combined_content.append(f"Summary: {snippet}")
+                            if (
+                                description
+                                and description not in content
+                                and description != snippet
+                            ):
+                                combined_content.append(f"Description: {description}")
+
+                            # Join all content with clear separators
+                            final_content = (
+                                "\n\n".join(combined_content)
+                                if combined_content
+                                else "No content available"
+                            )
+
+                            # Ensure minimum content quality for web-only mode
+                            if search_mode == "web" and len(final_content) < 100:
+                                # Add URL as fallback information
+                                url = result.metadata.get("url", "")
+                                if url:
+                                    final_content += f"\n\nSource URL: {url}"
+
                             legacy_results.append(
                                 {
-                                    "text": result.content,
+                                    "text": final_content,
                                     "metadata": result.metadata,
                                     "similarity_score": result.score,
                                     "search_type": result.search_type,
                                 }
                             )
+                            web_results_added += 1
+                            logger.debug(
+                                f"Added web result {web_results_added}: title='{result.metadata.get('title', 'No title')}', content_length={len(final_content)}"
+                            )
 
-                    logger.info(f"Added {len(web_search_results)} web search results")
+                    logger.info(
+                        f"Added {web_results_added} web search results out of {len(web_search_results)} total"
+                    )
                 except Exception as e:
-                    logger.warning(f"Web search failed: {e}")
+                    logger.warning(f"Web search failed: {e}", exc_info=True)
 
             logger.info(
                 f"Retrieved {len(legacy_results)} total results (documents + web)"

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import { Send, Bot, User, Upload, UserRound, Square, Globe, Settings } from 'lucide-react';
+import { Send, Bot, User, Upload, UserRound, Square, Globe, Settings, FileText } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,7 +12,7 @@ import { DocumentSources } from './DocumentSources';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (message: string, includeWebSearch?: boolean) => void;
+  onSendMessage: (message: string, searchMode?: 'documents' | 'web' | 'hybrid', selectedSearchEngine?: string) => void;
   onFileUpload: (files: File[]) => Promise<any>;
   isLoading: boolean;
   onStopGeneration?: () => void;
@@ -435,53 +435,51 @@ const MessageInput = styled.textarea`
   }
 `;
 
-const WebSearchControls = styled.div`
+const SearchControls = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 20px;
+  padding: 20px 20px 0px 20px;
   background: #1a1a1a;
   border-top: 1px solid #333;
   font-size: 0.85rem;
 `;
 
-const WebSearchToggle = styled.div`
+const SearchModeGroup = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #ccc;
-  cursor: pointer;
-  padding: 6px 10px;
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid #444;
+`;
+
+const SearchModeButton = styled.button<{ $active: boolean; $color: string }>`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
   border-radius: 8px;
+  border: none;
+  background: ${props => props.$active ? props.$color : 'transparent'};
+  color: ${props => props.$active ? '#000' : '#ccc'};
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
   transition: all 0.2s ease;
   
   &:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    background: ${props => props.$active ? props.$color : 'rgba(255, 255, 255, 0.1)'};
+    color: ${props => props.$active ? '#000' : '#fff'};
   }
 `;
 
-const ToggleSwitch = styled.div<{ $enabled: boolean }>`
-  width: 40px;
+const Divider = styled.div`
+  width: 1px;
   height: 20px;
-  background: ${props => props.$enabled ? '#28b80f' : '#444'};
-  border-radius: 10px;
-  position: relative;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  
-  &::after {
-    content: '';
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    background: white;
-    border-radius: 50%;
-    top: 2px;
-    left: ${props => props.$enabled ? '22px' : '2px'};
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  }
+  background: #444;
+  margin: 0 8px;
 `;
 
 const SettingsButton = styled.button`
@@ -556,6 +554,15 @@ const SettingsContainer = styled.div`
   position: relative;
   display: flex;
   align-items: center;
+`;
+
+const SearchEngineInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  font-weight: 500;
 `;
 
 const SendButton = styled.button<{ $disabled: boolean; $isGenerating?: boolean }>`
@@ -759,9 +766,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
   const [inputValue, setInputValue] = useState('');
   const [copyNotification, setCopyNotification] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{ documentId: string; filename: string } | null>(null);
-  const [includeWebSearch, setIncludeWebSearch] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [selectedSearchEngine, setSelectedSearchEngine] = useState('duckduckgo');
+  const [searchMode, setSearchMode] = useState<'documents' | 'web' | 'hybrid'>('documents');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -779,11 +784,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
     if (isLoading && onStopGeneration) {
       // Stop generation
       onStopGeneration();
-    } else if (inputValue.trim() && !isLoading) {
-      // Send message with web search preference
-      onSendMessage(inputValue.trim(), includeWebSearch);
-      setInputValue('');
-    }
+          } else if (inputValue.trim() && !isLoading) {
+        // Send message with search mode preference (SerpAPI is the only option)
+        onSendMessage(inputValue.trim(), searchMode, 'serpapi');
+        setInputValue('');
+      }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -1045,67 +1050,69 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
         <div ref={messagesEndRef} />
       </MessagesContainer>
 
-      <WebSearchControls>
-        <WebSearchToggle onClick={() => setIncludeWebSearch(!includeWebSearch)}>
-          <Globe size={16} />
-          <span>Web Search</span>
-          <ToggleSwitch $enabled={includeWebSearch} />
-        </WebSearchToggle>
-        
-        <SettingsContainer>
-          <SettingsButton 
-            onClick={() => setShowSettings(!showSettings)}
-            title="Search Settings"
+      <SearchControls>
+        <SearchModeGroup>
+          <SearchModeButton 
+            $active={searchMode === 'documents'} 
+            $color="#00ffff"
+            onClick={() => setSearchMode('documents')}
+            title="Search only in uploaded documents"
           >
-            <Settings size={14} />
-          </SettingsButton>
+            <FileText size={14} />
+            Internal
+          </SearchModeButton>
           
-          <SettingsDropdown $visible={showSettings}>
-            <SettingsHeader>Search Engine</SettingsHeader>
-            <SearchEngineOption 
-              $selected={selectedSearchEngine === 'duckduckgo'}
-              onClick={() => {
-                setSelectedSearchEngine('duckduckgo');
-                setShowSettings(false);
-              }}
-            >
-              <Globe size={12} />
-              DuckDuckGo (Default)
-            </SearchEngineOption>
-            <SearchEngineOption 
-              $selected={selectedSearchEngine === 'brave'}
-              onClick={() => {
-                setSelectedSearchEngine('brave');
-                setShowSettings(false);
-              }}
-            >
-              <Globe size={12} />
-              Brave Search
-            </SearchEngineOption>
-            <SearchEngineOption 
-              $selected={selectedSearchEngine === 'bing'}
-              onClick={() => {
-                setSelectedSearchEngine('bing');
-                setShowSettings(false);
-              }}
-            >
-              <Globe size={12} />
-              Microsoft Bing
-            </SearchEngineOption>
-          </SettingsDropdown>
-        </SettingsContainer>
+          <SearchModeButton 
+            $active={searchMode === 'web'} 
+            $color="#ff6b9d"
+            onClick={() => setSearchMode('web')}
+            title="Search only on the web"
+          >
+            <Globe size={14} />
+            Web
+          </SearchModeButton>
+          
+          <SearchModeButton 
+            $active={searchMode === 'hybrid'} 
+            $color="#00ff7f"
+            onClick={() => setSearchMode('hybrid')}
+            title="Search both documents and web"
+          >
+            <Globe size={12} />
+            <FileText size={12} />
+            Both
+          </SearchModeButton>
+        </SearchModeGroup>
         
-        <WebSearchStatus $enabled={includeWebSearch}>
-          {includeWebSearch ? (
+        <Divider />
+        
+        <SearchEngineInfo>
+          <Globe size={12} />
+          <span>Powered by Google (SerpAPI)</span>
+        </SearchEngineInfo>
+        
+        <WebSearchStatus $enabled={searchMode !== 'documents'}>
+          {searchMode === 'documents' && (
+            <>
+              <FileText size={12} />
+              <span>Internal documents only</span>
+            </>
+          )}
+          {searchMode === 'web' && (
             <>
               <Globe size={12} />
-              <span>Enhanced with web results</span>
+              <span>Web search only</span>
             </>
-          ) : (
-            <span>Documents only</span>
+          )}
+          {searchMode === 'hybrid' && (
+            <>
+              <Globe size={12} />
+              <FileText size={12} />
+              <span>Documents + Web</span>
+            </>
           )}
         </WebSearchStatus>
-      </WebSearchControls>
+      </SearchControls>
 
       <InputContainer {...getRootProps()} $isDragActive={isDragActive}>
         <DragOverlay $isDragActive={isDragActive}>

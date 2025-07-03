@@ -73,31 +73,18 @@ DEFAULT_CONFIGS = {
             },
             "agent_type": "multi_provider",
             "agent_config": {
-                "provider_priority": ["brave_search", "serpapi", "duckduckgo"],
-                "max_concurrent_searches": 2,
+                "provider_priority": ["serpapi"],
+                "max_concurrent_searches": 1,
                 "timeout_per_provider": 15,
-                "fallback_enabled": True,
+                "fallback_enabled": False,
                 "providers": {
-                    "duckduckgo": {
-                        "timeout": 10,
-                        "max_results": 10,
-                        "region": "us-en",
-                        "safesearch": "moderate",
-                    },
-                    "brave_search": {
-                        "api_key": "BSAf1RgBgRTsqYs0H0yVfIoJryybqCJ",
-                        "timeout": 15,
-                        "max_results": 10,
-                        "country": "US",
-                        "safesearch": "moderate",
-                    },
                     "serpapi": {
                         "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
                         "timeout": 15,
                         "max_results": 10,
-                        "engine": "google",
                         "location": "United States",
-                    },
+                        "device": "desktop",
+                    }
                 },
             },
         },
@@ -154,31 +141,18 @@ DEFAULT_CONFIGS = {
             },
             "agent_type": "multi_provider",
             "agent_config": {
-                "provider_priority": ["brave_search", "serpapi", "duckduckgo"],
-                "max_concurrent_searches": 3,
-                "timeout_per_provider": 20,
-                "fallback_enabled": True,
+                "provider_priority": ["serpapi"],
+                "max_concurrent_searches": 1,
+                "timeout_per_provider": 15,
+                "fallback_enabled": False,
                 "providers": {
-                    "duckduckgo": {
-                        "timeout": 10,
-                        "max_results": 10,
-                        "region": "us-en",
-                        "safesearch": "moderate",
-                    },
-                    "brave_search": {
-                        "api_key": "BSAf1RgBgRTsqYs0H0yVfIoJryybqCJ",
-                        "timeout": 15,
-                        "max_results": 15,
-                        "country": "US",
-                        "safesearch": "moderate",
-                    },
                     "serpapi": {
                         "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
-                        "timeout": 20,
-                        "max_results": 15,
-                        "engine": "google",
+                        "timeout": 15,
+                        "max_results": 10,
                         "location": "United States",
-                    },
+                        "device": "desktop",
+                    }
                 },
             },
         },
@@ -223,18 +197,17 @@ DEFAULT_CONFIGS = {
             "fusion_config": {"max_results": 8},
             "agent_type": "multi_provider",
             "agent_config": {
-                "provider_priority": [
-                    "duckduckgo"
-                ],  # Only free provider for performance
+                "provider_priority": ["serpapi"],
                 "max_concurrent_searches": 1,
-                "timeout_per_provider": 10,
+                "timeout_per_provider": 15,
                 "fallback_enabled": False,
                 "providers": {
-                    "duckduckgo": {
-                        "timeout": 8,
-                        "max_results": 8,
-                        "region": "us-en",
-                        "safesearch": "moderate",
+                    "serpapi": {
+                        "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+                        "timeout": 15,
+                        "max_results": 10,
+                        "location": "United States",
+                        "device": "desktop",
                     }
                 },
             },
@@ -281,16 +254,17 @@ DEFAULT_CONFIGS = {
             "fusion_config": {"max_results": 5},
             "agent_type": "multi_provider",
             "agent_config": {
-                "provider_priority": ["duckduckgo"],  # Only DuckDuckGo for speed
+                "provider_priority": ["serpapi"],
                 "max_concurrent_searches": 1,
-                "timeout_per_provider": 8,
+                "timeout_per_provider": 15,
                 "fallback_enabled": False,
                 "providers": {
-                    "duckduckgo": {
-                        "timeout": 5,
-                        "max_results": 5,
-                        "region": "us-en",
-                        "safesearch": "moderate",
+                    "serpapi": {
+                        "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+                        "timeout": 15,
+                        "max_results": 10,
+                        "location": "United States",
+                        "device": "desktop",
                     }
                 },
             },

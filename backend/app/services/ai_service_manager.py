@@ -386,8 +386,9 @@ class AIServiceManager:
 
             # Convert to SearchResult format
             converted_results = []
-            for web_result in web_results:
+            for i, web_result in enumerate(web_results):
                 search_result = SearchResult(
+                    document_id=f"web_search_{i}_{hash(web_result.url) % 10000}",  # Generate unique ID for web results
                     content=web_result.snippet or web_result.content or "",
                     metadata={
                         "title": web_result.title,
@@ -446,8 +447,9 @@ class AIServiceManager:
                 )
 
                 # Convert web results to SearchResult format
-                for web_result in web_search_results:
+                for i, web_result in enumerate(web_search_results):
                     search_result = SearchResult(
+                        document_id=f"web_search_hybrid_{i}_{hash(web_result.url) % 10000}",  # Generate unique ID for web results
                         content=web_result.snippet or web_result.content or "",
                         metadata={
                             "title": web_result.title,
@@ -511,9 +513,10 @@ class AIServiceManager:
 
                     # Convert fused results back to SearchResult format
                     final_results = []
-                    for result in fused_results:
+                    for i, result in enumerate(fused_results):
                         if result.get("result_type") == "web_search":
                             search_result = SearchResult(
+                                document_id=f"fused_web_{i}_{hash(str(result.get('metadata', {}).get('url', '')) or str(i)) % 10000}",
                                 content=result.get("content", ""),
                                 metadata=result.get("metadata", {}),
                                 score=result.get("final_score", result.get("score", 0)),
@@ -521,6 +524,7 @@ class AIServiceManager:
                             )
                         else:
                             search_result = SearchResult(
+                                document_id=f"fused_doc_{i}_{hash(str(result.get('metadata', {}).get('document_id', '')) or str(i)) % 10000}",
                                 content=result.get("content", ""),
                                 metadata=result.get("metadata", {}),
                                 score=result.get("final_score", result.get("score", 0)),

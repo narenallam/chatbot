@@ -25,9 +25,11 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4", env="OPENAI_MODEL")
 
-    # Web Search API Settings
-    serpapi_api_key: Optional[str] = Field(default=None, env="SERPAPI_API_KEY")
-    brave_api_key: Optional[str] = Field(default=None, env="BRAVE_API_KEY")
+    # Web Search API Settings - SerpAPI only
+    serpapi_api_key: Optional[str] = Field(
+        default="e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+        env="SERPAPI_API_KEY",
+    )
 
     # Ollama Settings
     ollama_base_url: str = Field(
@@ -117,6 +119,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = (
+            "ignore"  # Ignore extra environment variables instead of forbidding them
+        )
 
 
 # Global settings instance

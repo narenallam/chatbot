@@ -457,7 +457,7 @@ function App() {
     await checkSystemStatus(false);
   };
 
-  const sendMessage = async (message: string, includeWebSearch: boolean = true, selectedSearchEngine: string = 'duckduckgo') => {
+  const sendMessage = async (message: string, searchMode: 'documents' | 'web' | 'hybrid' = 'documents', selectedSearchEngine: string = 'serpapi') => {
     if (!message.trim()) return;
     
     console.log('🚀 Sending message:', message);
@@ -523,8 +523,8 @@ function App() {
         body: JSON.stringify({
           message,
           conversation_id: conversationId,
-          use_context: true,
-          include_web_search: includeWebSearch,
+          use_context: searchMode !== 'web',  // Use documents unless web-only mode
+          include_web_search: searchMode !== 'documents',  // Use web search unless documents-only mode
           selected_search_engine: selectedSearchEngine,
           temperature: 0.7
         }),
