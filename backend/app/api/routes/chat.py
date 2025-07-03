@@ -2,11 +2,12 @@
 Chat API routes for the Personal Assistant AI Chatbot
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from typing import List, AsyncGenerator
 import logging
 import json
+import asyncio
 
 from app.models.schemas import (
     ChatRequest,
@@ -39,7 +40,9 @@ async def chat_endpoint(request: ChatRequest):
             message=request.message,
             conversation_id=request.conversation_id,
             use_context=request.use_context,
+            include_web_search=request.include_web_search,
             temperature=request.temperature,
+            selected_search_engine=request.selected_search_engine,
         )
         return response
 
@@ -51,7 +54,7 @@ async def chat_endpoint(request: ChatRequest):
 
 
 @router.post("/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest):
+async def chat_stream_endpoint(chat_request: ChatRequest, request: Request):
     """
     Process a chat message with streaming response
 
@@ -64,16 +67,38 @@ async def chat_stream_endpoint(request: ChatRequest):
     try:
 
         async def generate_stream() -> AsyncGenerator[str, None]:
-            async for chunk in chat_service.chat_stream(
-                message=request.message,
-                conversation_id=request.conversation_id,
-                use_context=request.use_context,
-                temperature=request.temperature,
-            ):
-                yield f"data: {json.dumps(chunk)}\n\n"
+            try:
+                async for chunk in chat_service.chat_stream(
+                    message=chat_request.message,
+                    conversation_id=chat_request.conversation_id,
+                    use_context=chat_request.use_context,
+                    include_web_search=chat_request.include_web_search,
+                    selected_search_engine=chat_request.selected_search_engine,
+                    temperature=chat_request.temperature,
+                ):
+                    # Check if client has disconnected
+                    if await request.is_disconnected():
+                        logger.info("Client disconnected, stopping stream")
+                        break
+                    
+                    yield f"data: {json.dumps(chunk)}\n\n"
 
-            # Send end signal
-            yield f"data: {json.dumps({'type': 'end'})}\n\n"
+                # Send end signal only if client is still connected
+                if not await request.is_disconnected():
+                    yield f"data: {json.dumps({'type': 'end'})}\n\n"
+                    
+            except asyncio.CancelledError:
+                logger.info("Stream cancelled")
+                # Send cancellation signal if client is still connected
+                if not await request.is_disconnected():
+                    yield f"data: {json.dumps({'type': 'cancelled'})}\n\n"
+                raise
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+                # Send error signal if client is still connected
+                if not await request.is_disconnected():
+                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                raise
 
         return StreamingResponse(
             generate_stream(),

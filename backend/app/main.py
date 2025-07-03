@@ -7,6 +7,11 @@ import os
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+# Load environment variables BEFORE any other imports that might use them
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import (
     FastAPI,
     WebSocket,
@@ -20,14 +25,12 @@ import uvicorn
 import json
 from typing import Dict, Set
 from datetime import datetime
-from dotenv import load_dotenv
 
 from app.api.routes import chat, documents, upload, generate, admin
 from app.core.config import settings
 from app.services.database_service import DatabaseService
-
-# Load environment variables
-load_dotenv()
+from app.services.ai_service_manager import ai_service_manager
+from app.core.registry import register_all_implementations
 
 
 # WebSocket connection manager
@@ -186,6 +189,26 @@ async def startup_event():
     # Create necessary directories
     os.makedirs("./data", exist_ok=True)
     os.makedirs("./embeddings", exist_ok=True)
+
+    # Register all AI implementations
+    await broadcast_log("info", "📋 Registering AI component implementations...")
+    register_all_implementations()
+
+    # Initialize AI Service Manager with recommended configuration
+    await broadcast_log("info", "🔧 Initializing AI Service Manager...")
+    success = await ai_service_manager.initialize()
+
+    if success:
+        stats = ai_service_manager.get_service_stats()
+        config_info = stats.get("current_config", {})
+        await broadcast_log(
+            "info", f"✅ AI Service Manager initialized with stack: {config_info}"
+        )
+        await broadcast_log("info", f"📊 Components: {list(config_info.keys())}")
+    else:
+        await broadcast_log(
+            "error", "❌ Failed to initialize AI Service Manager - using fallback mode"
+        )
 
     # Broadcast startup message
     await broadcast_log("info", "🚀 Backend server started and ready")

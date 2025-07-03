@@ -110,7 +110,7 @@ start_backend() {
     
     cd backend
     source venv/bin/activate
-    python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > /dev/null 2>&1 &
+    python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > uvicorn.log 2>&1 &
     BACKEND_PID=$!
     cd ..
     sleep 3

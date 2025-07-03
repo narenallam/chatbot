@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import { Send, Bot, User, Upload, UserRound } from 'lucide-react';
+import { Send, Bot, User, Upload, UserRound, Square, Globe, Settings } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,9 +12,10 @@ import { DocumentSources } from './DocumentSources';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, includeWebSearch?: boolean) => void;
   onFileUpload: (files: File[]) => Promise<any>;
   isLoading: boolean;
+  onStopGeneration?: () => void;
   contextInfo?: { model_name: string; context_window: number; buffer_size: number } | null;
 }
 
@@ -31,7 +32,7 @@ const Container = styled.div`
 const MessagesContainer = styled.div`
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 20px 20px 20px 20px;
   scroll-behavior: smooth;
   display: flex;
   flex-direction: column;
@@ -74,10 +75,11 @@ const MessageBubble = styled.div<{ $isUser: boolean }>`
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  margin: ${props => props.$isUser ? '2px 0' : '8px 0'};
+  margin: ${props => props.$isUser ? '2px 0' : props.$isUser === false ? '8px 0 88px 0' : '8px 0'};
   width: 100%;
   flex-direction: ${props => props.$isUser ? 'row-reverse' : 'row'};
   justify-content: ${props => props.$isUser ? 'flex-end' : 'flex-start'};
+  position: relative;
 `;
 
 const Avatar = styled.div<{ $isUser: boolean }>`
@@ -93,11 +95,15 @@ const Avatar = styled.div<{ $isUser: boolean }>`
   font-size: 16px;
   flex-shrink: 0;
   box-shadow: none;
+  ${props => props.$isUser ? 'position: absolute; right: 0; top: 0;' : ''}
 `;
 
 const MessageContent = styled.div<{ $isUser: boolean; $neonColor?: string }>`
-  background: linear-gradient(135deg, rgba(45, 45, 45, 0.7) 0%, rgba(35, 35, 35, 0.8) 100%);
-  border: 0.5px solid rgb(42, 42, 42);
+  background: ${props => props.$isUser ? 
+    'linear-gradient(135deg, rgba(25, 25, 25, 0.9) 0%, rgba(20, 20, 20, 0.95) 100%)' : 
+    'linear-gradient(135deg, rgba(35, 35, 35, 0.8) 0%, rgba(28, 28, 28, 0.9) 100%)'
+  };
+  border: 0.5px solid ${props => props.$isUser ? 'rgb(30, 30, 30)' : 'rgb(42, 42, 42)'};
   border-radius: ${props => props.$isUser ? '22px 8px 22px 22px' : '17px'};
   overflow: hidden;
   color: #fff;
@@ -111,67 +117,69 @@ const MessageContent = styled.div<{ $isUser: boolean; $neonColor?: string }>`
   flex-direction: column;
   align-items: stretch;
   margin-left: ${props => props.$isUser ? 'auto' : '0'};
-  margin-right: ${props => props.$isUser ? '0' : 'auto'};
-  max-width: ${props => props.$isUser ? '60%' : '75%'};
+  margin-right: ${props => props.$isUser ? '48px' : '44px'};
+  max-width: calc(100% - 86px);
   min-width: 36px;
-  width: ${props => props.$isUser ? 'fit-content' : '75%'};
-  padding: ${props => props.$isUser ? '6px 16px' : '4px 22px 8px 22px'};
+  width: ${props => props.$isUser ? 'fit-content' : 'calc(100% - 86px)'};
+  padding: ${props => props.$isUser ? '8px 12px' : '8px 16px 8px 12px'};
 `;
 
 const MessageCopyButton = styled.button`
-  background: linear-gradient(135deg, rgba(35, 35, 40, 0.7) 0%, rgba(25, 25, 30, 0.8) 100%);
+  background: none;
   border: none;
-  color: #999;
+  color: #666;
   cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 2px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+  flex-shrink: 0;
   
   &:hover {
-    color: #ffffff;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.15) 0%, rgba(0, 200, 255, 0.2) 100%);
-    box-shadow: 0 3px 12px rgba(0, 255, 255, 0.15);
-    transform: translateY(-0.5px);
+    color: #28b80f;
+    opacity: 1;
+    transform: scale(1.1);
   }
   
   &:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 6px rgba(0, 255, 255, 0.2);
+    transform: scale(0.95);
   }
 `;
 
 const MessageCopyIcon = styled.div`
   position: relative;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   
   &::before, &::after {
     content: '';
     position: absolute;
-    border: 1.5px solid currentColor;
-    border-radius: 4px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    background: transparent;
   }
   
   &::before {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     top: 0;
-    left: 2.5px;
+    right: 0;
+    border-bottom: none;
+    border-left: none;
   }
   
   &::after {
-    width: 9px;
-    height: 9px;
-    top: 2.5px;
+    width: 8px;
+    height: 8px;
+    bottom: 0;
     left: 0;
-    background: #1a1a1a;
+    border-top: none;
+    border-right: none;
   }
 `;
 
@@ -182,10 +190,15 @@ const MessageBody = styled.div`
 const MessageTime = styled.div`
   font-size: 0.7rem;
   color: #666;
-  margin-top: 12px;
+  opacity: 0.8;
   text-align: right;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 4px 0 8px 0;
+  margin-top: 2px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 `;
 
 const MarkdownContent = styled.div`
@@ -238,21 +251,21 @@ const MarkdownContent = styled.div`
   }
   
   p {
-    margin: 16px 0;
+    margin: 8px 0;
     color: #e8e8e8;
     font-weight: 400;
-    line-height: 1.7;
+    line-height: 1.6;
   }
   
   ul, ol {
-    margin: 16px 0;
-    padding-left: 24px;
+    margin: 12px 0;
+    padding-left: 20px;
   }
   
   li {
-    margin: 8px 0;
+    margin: 4px 0;
     color: #e8e8e8;
-    line-height: 1.6;
+    line-height: 1.5;
     
     &::marker {
       color: #00ffff;
@@ -263,8 +276,8 @@ const MarkdownContent = styled.div`
   blockquote {
     border-left: 4px solid #00ffff;
     background: rgba(0, 255, 255, 0.05);
-    margin: 20px 0;
-    padding: 16px 20px;
+    margin: 12px 0;
+    padding: 12px 16px;
     border-radius: 0 8px 8px 0;
     color: #d0d0d0;
     font-style: italic;
@@ -345,10 +358,7 @@ const MarkdownContent = styled.div`
 
 const InputContainer = styled.div<{ $isDragActive?: boolean }>`
   padding: 20px;
-  background: ${props => props.$isDragActive ? 
-    'linear-gradient(135deg, rgba(0, 255, 255, 0.08) 0%, rgba(0, 200, 255, 0.08) 100%)' :
-    'linear-gradient(135deg, rgba(0, 255, 255, 0.02) 0%, rgba(0, 200, 255, 0.02) 100%)'
-  };
+  background: #1a1a1a;
   box-shadow: none;
   min-height: 176px;
   transition: all 0.2s ease;
@@ -357,14 +367,14 @@ const InputContainer = styled.div<{ $isDragActive?: boolean }>`
     border: 2px dashed #00ffff;
     border-radius: 12px;
     box-shadow: none;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.08) 0%, rgba(0, 200, 255, 0.08) 100%);
   `}
 `;
 
 const InputWrapper = styled.div`
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
   position: relative;
+  display: flex;
+  align-items: stretch;
 `;
 
 const DragOverlay = styled.div<{ $isDragActive: boolean }>`
@@ -400,10 +410,10 @@ const DragHint = styled.div`
 
 const MessageInput = styled.textarea`
   flex: 1;
-  background: linear-gradient(135deg, rgba(136, 136, 136, 0.05) 0%, rgba(136, 136, 136, 0.05) 100%);
-  border: 1px solid #888888;
+  background: #1a1a1a;
+  border: 1px solid #333;
   border-radius: 17px;
-  padding: 16px 20px;
+  padding: 16px 70px 16px 20px;
   color: #ffffff;
   font-size: 0.9rem;
   resize: none;
@@ -415,9 +425,8 @@ const MessageInput = styled.textarea`
   
   &:focus {
     outline: none;
-    border-color: #888888;
+    border-color: #555;
     box-shadow: none;
-    background: linear-gradient(135deg, rgba(136, 136, 136, 0.1) 0%, rgba(136, 136, 136, 0.1) 100%);
   }
   
   &::placeholder {
@@ -426,31 +435,170 @@ const MessageInput = styled.textarea`
   }
 `;
 
-const SendButton = styled.button<{ $disabled: boolean }>`
-  background: ${props => props.$disabled ? 
-    'linear-gradient(135deg, rgba(102, 102, 102, 0.2) 0%, rgba(68, 68, 68, 0.2) 100%)' : 
+const WebSearchControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: #1a1a1a;
+  border-top: 1px solid #333;
+  font-size: 0.85rem;
+`;
+
+const WebSearchToggle = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+`;
+
+const ToggleSwitch = styled.div<{ $enabled: boolean }>`
+  width: 40px;
+  height: 20px;
+  background: ${props => props.$enabled ? '#28b80f' : '#444'};
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: ${props => props.$enabled ? '22px' : '2px'};
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+`;
+
+const SettingsButton = styled.button`
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    color: #28b80f;
+    background: rgba(40, 184, 15, 0.1);
+  }
+`;
+
+const WebSearchStatus = styled.div<{ $enabled: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: ${props => props.$enabled ? '#28b80f' : '#666'};
+  margin-left: auto;
+`;
+
+const SettingsDropdown = styled.div<{ $visible: boolean }>`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 8px 0;
+  min-width: 200px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  display: ${props => props.$visible ? 'block' : 'none'};
+  margin-top: 4px;
+`;
+
+const SettingsHeader = styled.div`
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ccc;
+  border-bottom: 1px solid #444;
+  margin-bottom: 4px;
+`;
+
+const SearchEngineOption = styled.div<{ $selected: boolean }>`
+  padding: 8px 12px;
+  color: ${props => props.$selected ? '#28b80f' : '#ccc'};
+  background: ${props => props.$selected ? 'rgba(40, 184, 15, 0.1)' : 'transparent'};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(40, 184, 15, 0.1);
+    color: #28b80f;
+  }
+`;
+
+const SettingsContainer = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+`;
+
+const SendButton = styled.button<{ $disabled: boolean; $isGenerating?: boolean }>`
+  background: ${props => 
+    props.$isGenerating ? 'linear-gradient(135deg, #ff4444 0%, #cc3333 100%)' :
+    props.$disabled ? 'linear-gradient(135deg, rgba(102, 102, 102, 0.2) 0%, rgba(68, 68, 68, 0.2) 100%)' : 
     'linear-gradient(135deg, #00ffff 0%, #00cccc 100%)'
   };
-  color: ${props => props.$disabled ? '#666' : '#000000'};
-  border: ${props => props.$disabled ? '1px solid #444' : '1px solid #00ffff'};
+  color: ${props => 
+    props.$isGenerating ? '#ffffff' :
+    props.$disabled ? '#666' : '#000000'
+  };
+  border: ${props => 
+    props.$isGenerating ? '1px solid #ff4444' :
+    props.$disabled ? '1px solid #444' : '1px solid #00ffff'
+  };
   border-radius: 50%;
   width: 54px;
   height: 54px;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
   transition: all 0.2s ease;
   box-shadow: none;
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
   
-  &:hover:not(:disabled) {
-    transform: scale(1.1);
-    box-shadow: none;
-    background: linear-gradient(135deg, #ffffff 0%, #00ffff 100%);
+  &:hover {
+    ${props => props.disabled ? '' : `
+      transform: translateY(-50%) scale(1.1);
+      box-shadow: none;
+      background: ${props.$isGenerating ? 'linear-gradient(135deg, #ff6666 0%, #ff4444 100%)' : 'linear-gradient(135deg, #ffffff 0%, #00ffff 100%)'};
+      cursor: pointer;
+    `}
   }
   
-  &:active:not(:disabled) {
-    transform: scale(0.95);
+  &:active {
+    ${props => props.disabled ? '' : `
+      transform: translateY(-50%) scale(0.95);
+    `}
   }
 `;
 
@@ -575,38 +723,45 @@ const CopyButton = styled.button`
 
 const CopyIcon = styled.div`
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   
   &::before, &::after {
     content: '';
     position: absolute;
-    border: 2px solid currentColor;
-    border-radius: 5px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    background: transparent;
   }
   
   &::before {
-    width: 11px;
-    height: 11px;
+    width: 8px;
+    height: 8px;
     top: 0;
-    left: 3px;
+    right: 0;
+    border-bottom: none;
+    border-left: none;
   }
   
   &::after {
-    width: 11px;
-    height: 11px;
-    top: 3px;
+    width: 8px;
+    height: 8px;
+    bottom: 0;
     left: 0;
-    background: #1e1e1e;
+    border-top: none;
+    border-right: none;
   }
 `;
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onFileUpload, isLoading, contextInfo }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, onFileUpload, isLoading, onStopGeneration, contextInfo }) => {
   console.log('🎯 ChatPanel received messages:', messages.length, messages);
   
   const [inputValue, setInputValue] = useState('');
   const [copyNotification, setCopyNotification] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{ documentId: string; filename: string } | null>(null);
+  const [includeWebSearch, setIncludeWebSearch] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [selectedSearchEngine, setSelectedSearchEngine] = useState('duckduckgo');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -621,8 +776,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim() && !isLoading) {
-      onSendMessage(inputValue.trim());
+    if (isLoading && onStopGeneration) {
+      // Stop generation
+      onStopGeneration();
+    } else if (inputValue.trim() && !isLoading) {
+      // Send message with web search preference
+      onSendMessage(inputValue.trim(), includeWebSearch);
       setInputValue('');
     }
   };
@@ -775,13 +934,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                       style={tomorrow}
                       language={language}
                       PreTag="div"
+                      showLineNumbers={false}
+                      wrapLines={false}
                       customStyle={{
                         background: 'transparent',
                         margin: 0,
                         padding: 0,
                         fontSize: 'inherit',
                         fontFamily: 'inherit',
-                        lineHeight: 'inherit'
+                        lineHeight: 'inherit',
+                        border: 'none',
+                        outline: 'none'
                       }}
                     >
                       {codeContent}
@@ -844,39 +1007,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
                 $isUser={message.role === 'user'}
                 $neonColor={message.neonColor}
               >
+                
                 <MessageBody>
-                  <MarkdownContent style={{padding: message.role === 'user' ? '0' : '16px 16px 0 16px'}}>
+                  <MarkdownContent style={{padding: message.role === 'user' ? '0' : '0'}}>
                     {message.role === 'user' ? (
-                      <p>{message.content}</p>
+                      <p style={{margin: 0}}>{message.content}</p>
                     ) : (
                       renderMarkdown(message.content)
                     )}
                   </MarkdownContent>
                   
                   {/* Show document sources for AI messages */}
-                  {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
+                  {message.role === 'assistant' && (
                     <DocumentSources 
-                      sources={message.sources} 
+                      sources={message.sources || []} 
                       onDocumentClick={handleDocumentClick}
                     />
                   )}
                   
-                  {/* Only show copy button and time for assistant */}
+                  {/* Only show time for assistant */}
                   {message.role === 'assistant' && (
-                    <MessageTime style={{padding: '0 16px 12px 16px'}}>
+                    <MessageTime>
+                      <span>{formatTime(message.timestamp)}</span>
                       <MessageCopyButton 
                         onClick={() => copyToClipboard(message.content)}
-                        style={{
-                          float: 'left',
-                          marginRight: '8px',
-                          marginTop: '0px'
-                        }}
-                        title="Copy message"
+                        title="Copy"
                       >
                         <MessageCopyIcon />
-                        Copy
                       </MessageCopyButton>
-                      {formatTime(message.timestamp)}
                     </MessageTime>
                   )}
                 </MessageBody>
@@ -886,6 +1044,68 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
         )}
         <div ref={messagesEndRef} />
       </MessagesContainer>
+
+      <WebSearchControls>
+        <WebSearchToggle onClick={() => setIncludeWebSearch(!includeWebSearch)}>
+          <Globe size={16} />
+          <span>Web Search</span>
+          <ToggleSwitch $enabled={includeWebSearch} />
+        </WebSearchToggle>
+        
+        <SettingsContainer>
+          <SettingsButton 
+            onClick={() => setShowSettings(!showSettings)}
+            title="Search Settings"
+          >
+            <Settings size={14} />
+          </SettingsButton>
+          
+          <SettingsDropdown $visible={showSettings}>
+            <SettingsHeader>Search Engine</SettingsHeader>
+            <SearchEngineOption 
+              $selected={selectedSearchEngine === 'duckduckgo'}
+              onClick={() => {
+                setSelectedSearchEngine('duckduckgo');
+                setShowSettings(false);
+              }}
+            >
+              <Globe size={12} />
+              DuckDuckGo (Default)
+            </SearchEngineOption>
+            <SearchEngineOption 
+              $selected={selectedSearchEngine === 'brave'}
+              onClick={() => {
+                setSelectedSearchEngine('brave');
+                setShowSettings(false);
+              }}
+            >
+              <Globe size={12} />
+              Brave Search
+            </SearchEngineOption>
+            <SearchEngineOption 
+              $selected={selectedSearchEngine === 'bing'}
+              onClick={() => {
+                setSelectedSearchEngine('bing');
+                setShowSettings(false);
+              }}
+            >
+              <Globe size={12} />
+              Microsoft Bing
+            </SearchEngineOption>
+          </SettingsDropdown>
+        </SettingsContainer>
+        
+        <WebSearchStatus $enabled={includeWebSearch}>
+          {includeWebSearch ? (
+            <>
+              <Globe size={12} />
+              <span>Enhanced with web results</span>
+            </>
+          ) : (
+            <span>Documents only</span>
+          )}
+        </WebSearchStatus>
+      </WebSearchControls>
 
       <InputContainer {...getRootProps()} $isDragActive={isDragActive}>
         <DragOverlay $isDragActive={isDragActive}>
@@ -910,9 +1130,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ messages, onSendMessage, o
             />
             <SendButton 
               type="submit" 
-              $disabled={!inputValue.trim() || isLoading}
+              $disabled={!inputValue.trim() && !isLoading}
+              $isGenerating={isLoading}
+              disabled={false}
+              title={isLoading ? "Stop generation" : "Send message"}
             >
-              <Send size={18} />
+              {isLoading ? <Square size={18} /> : <Send size={18} />}
             </SendButton>
           </InputWrapper>
         </form>

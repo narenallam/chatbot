@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4", env="OPENAI_MODEL")
 
+    # Web Search API Settings
+    serpapi_api_key: Optional[str] = Field(default=None, env="SERPAPI_API_KEY")
+    brave_api_key: Optional[str] = Field(default=None, env="BRAVE_API_KEY")
+
     # Ollama Settings
     ollama_base_url: str = Field(
         default="http://localhost:11434", env="OLLAMA_BASE_URL"

@@ -1,18 +1,68 @@
 import React from 'react';
 import styled from 'styled-components';
-import { FileText, ExternalLink } from 'lucide-react';
+import { FileText, ExternalLink, Globe, Clock, Star } from 'lucide-react';
 
 interface DocumentSource {
-  document_id: string;
+  document_id?: string | null;
   filename: string;
   chunk_text: string;
   similarity_score: number;
+  source_type?: string;
+  url?: string;
+  provider?: string;
+  is_recent?: boolean;
+  authority_score?: number;
 }
 
 interface DocumentSourcesProps {
   sources: DocumentSource[];
   onDocumentClick: (documentId: string, filename: string) => void;
 }
+
+const WebSourceItem = styled.a`
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 17px;
+  padding: 8px 10px;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: block;
+  outline: none;
+  text-decoration: none;
+  color: inherit;
+  
+  &:hover, &:focus {
+    background: rgba(0, 255, 255, 0.1);
+    border-color: rgba(0, 255, 255, 0.4);
+    text-decoration: none;
+    color: inherit;
+  }
+`;
+
+const ProviderBadge = styled.span`
+  background: rgba(0, 255, 255, 0.2);
+  color: #00ffff;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  margin-left: 6px;
+`;
+
+const RecentBadge = styled.span`
+  background: rgba(255, 165, 0, 0.2);
+  color: #ffa500;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+`;
 
 const SourcesContainer = styled.div`
   margin-top: 12px;
@@ -109,20 +159,42 @@ const NoSources = styled.div`
   padding: 8px;
 `;
 
+const NoSourcesMessage = styled.div`
+  padding: 12px 16px;
+  color: #888;
+  font-style: italic;
+  font-size: 0.9em;
+  text-align: center;
+  border: 1px dashed #333;
+  border-radius: 4px;
+  margin-top: 8px;
+`;
+
+const SourceSectionHeader = styled.div`
+  font-weight: 500;
+  color: #00ffff;
+  font-size: 0.9em;
+  margin: 12px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
+`;
+
 export const DocumentSources: React.FC<DocumentSourcesProps> = ({
   sources,
   onDocumentClick
 }) => {
-  if (!sources || sources.length === 0) {
-    return null;
-  }
-
   const handleDocumentClick = (documentId: string, filename: string) => {
-    onDocumentClick(documentId, filename);
+    if (documentId) {
+      onDocumentClick(documentId, filename);
+    }
   };
 
-  // Remove duplicates based on document_id
-  const uniqueSources = sources.reduce((acc, current) => {
+  // Separate web and document sources
+  const documentSources = sources?.filter(s => s.source_type === 'document' && s.document_id) || [];
+  const webSources = sources?.filter(s => s.source_type === 'web_search') || [];
+  
+  // Remove duplicates for documents based on document_id
+  const uniqueDocSources = documentSources.reduce((acc, current) => {
     const existing = acc.find(item => item.document_id === current.document_id);
     if (!existing) {
       acc.push(current);
@@ -130,35 +202,99 @@ export const DocumentSources: React.FC<DocumentSourcesProps> = ({
     return acc;
   }, [] as DocumentSource[]);
 
+  // Remove duplicates for web sources based on URL
+  const uniqueWebSources = webSources.reduce((acc, current) => {
+    const existing = acc.find(item => item.url === current.url);
+    if (!existing) {
+      acc.push(current);
+    }
+    return acc;
+  }, [] as DocumentSource[]);
+
+  const totalSources = uniqueDocSources.length + uniqueWebSources.length;
+
+  // Don't render anything if no sources
+  if (totalSources === 0) {
+    return null;
+  }
+
   return (
     <SourcesContainer>
       <SourcesHeader>
         <FileText size={14} />
-        Referenced Documents ({uniqueSources.length})
+        Referenced Sources ({totalSources})
       </SourcesHeader>
       
       <SourcesList>
-        {uniqueSources.map((source, index) => (
-          <SourceItem
-            key={`${source.document_id}-${index}`}
-            onClick={() => handleDocumentClick(source.document_id, source.filename)}
-            title={`Click to preview ${source.filename}`}
-          >
-            <SourceHeader>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#00ffff', fontWeight: 300 }}>
-                <FileText size={12} />
-                {source.filename}
-                <ExternalLink size={10} />
-              </span>
-              <SourceScore>
-                {(source.similarity_score * 100).toFixed(1)}%
-              </SourceScore>
-            </SourceHeader>
-            <SourcePreview title={source.chunk_text}>
-              {source.chunk_text}
-            </SourcePreview>
-          </SourceItem>
-        ))}
+        {/* Document Sources */}
+        {uniqueDocSources.length > 0 && (
+          <>
+            <SourceSectionHeader>📄 Document Sources ({uniqueDocSources.length})</SourceSectionHeader>
+            {uniqueDocSources.map((source, index) => (
+              <SourceItem
+                key={`doc-${source.document_id}-${index}`}
+                onClick={() => handleDocumentClick(source.document_id!, source.filename)}
+                title={`Click to preview ${source.filename}`}
+              >
+                <SourceHeader>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#00ffff', fontWeight: 300 }}>
+                    <FileText size={12} />
+                    {source.filename}
+                    <ExternalLink size={10} />
+                  </span>
+                  <SourceScore>
+                    {(source.similarity_score * 100).toFixed(1)}%
+                  </SourceScore>
+                </SourceHeader>
+                <SourcePreview title={source.chunk_text}>
+                  {source.chunk_text}
+                </SourcePreview>
+              </SourceItem>
+            ))}
+          </>
+        )}
+        
+        {/* Web Sources */}
+        {uniqueWebSources.length > 0 && (
+          <>
+            <SourceSectionHeader>🌐 Web Sources ({uniqueWebSources.length})</SourceSectionHeader>
+            {uniqueWebSources.map((source, index) => (
+              <WebSourceItem
+                key={`web-${source.url}-${index}`}
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${source.filename} in new tab`}
+              >
+                <SourceHeader>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#00ffff', fontWeight: 300, flexWrap: 'wrap' }}>
+                    <Globe size={12} />
+                    {source.filename}
+                    <ExternalLink size={10} />
+                    {source.provider && <ProviderBadge>{source.provider}</ProviderBadge>}
+                    {source.is_recent && (
+                      <RecentBadge>
+                        <Clock size={10} />
+                        Recent
+                      </RecentBadge>
+                    )}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {source.authority_score && source.authority_score > 0.7 && (
+                      <Star size={10} style={{ color: '#ffa500' }} />
+                    )}
+                    <SourceScore>
+                      {(source.similarity_score * 100).toFixed(1)}%
+                    </SourceScore>
+                  </div>
+                </SourceHeader>
+                <SourcePreview title={source.chunk_text}>
+                  {source.chunk_text}
+                </SourcePreview>
+              </WebSourceItem>
+            ))}
+          </>
+        )}
       </SourcesList>
     </SourcesContainer>
   );

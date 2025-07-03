@@ -103,6 +103,8 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
     use_context: bool = True
+    include_web_search: bool = True
+    selected_search_engine: Optional[str] = Field(default="duckduckgo", description="Search engine to use: duckduckgo, brave, bing")
     temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
 
 

@@ -148,6 +148,8 @@ docx2txt==0.8
 python-pptx==1.0.2
 
 # Spreadsheet and CSV handling  
+pandas==2.2.3
+openpyxl==3.1.5
 xlsxwriter==3.2.0
 csvkit==2.1.0
 
@@ -159,3 +161,30 @@ reportlab==4.2.5
 
 # File type detection (platform specific)
 python-magic-bin==0.4.14; platform_system == "Windows"
+
+# Phase 2: ColBERT Integration for Precise Table Retrieval
+colbert-ai==0.2.19
+faiss-cpu==1.8.0
+torch==2.7.1  # Already included but ensuring compatibility
+transformers==4.52.4  # Already included but ensuring compatibility
+
+# Additional utilities for enhanced table processing
+rapidfuzz==3.10.1  # For fuzzy string matching in table queries
+dateparser==1.2.0  # For parsing date queries in tables
+
+# Alternative implementations for technology independence
+rank-bm25==0.2.2  # BM25 keyword search alternative
+hnswlib==0.8.0  # Alternative vector database
+pinecone-client==5.0.1  # Pinecone vector database option
+weaviate-client==4.9.4  # Weaviate vector database option
+
+# Web Search and Content Processing
+aiohttp==3.12.13  # Already included but ensuring compatibility
+beautifulsoup4==4.13.4  # Already included but ensuring compatibility
+lxml==5.4.0  # Already included but ensuring compatibility
+duckduckgo-search==6.3.0  # DuckDuckGo search library
+googlesearch-python==1.2.5  # Google search library (backup)
+newspaper3k==0.2.8  # Content extraction from web pages
+readability==0.3.1  # Content extraction and cleaning
+trafilatura==1.12.2  # Web content extraction
+html2text==2024.2.26  # HTML to text conversion

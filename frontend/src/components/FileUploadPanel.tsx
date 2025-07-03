@@ -115,7 +115,7 @@ const DropzoneHint = styled.div`
 `;
 
 const DocumentsStyle = styled.div`
-  color: #00ffff;
+  color: #28b80f;
   font-size: 0.9rem;
   margin-top: 8px;
   opacity: 0.9;
@@ -137,7 +137,7 @@ const DocumentsHeader = styled.div`
 `;
 
 const DocumentsTitle = styled.h3`
-  color: #888888;
+  color: #28b80f;
   font-size: 0.9rem;
   font-weight: 500;
   margin: 0;

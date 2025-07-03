@@ -88,20 +88,33 @@ class VectorService:
             texts = [doc.page_content for doc in documents]
             metadatas = [doc.metadata for doc in documents]
 
-            # Generate unique IDs for each chunk
+            # Generate unique IDs for each chunk and enhance metadata for table content
             chunk_ids = []
-            for i, metadata in enumerate(metadatas):
+            enhanced_metadatas = []
+            
+            for i, (text, metadata) in enumerate(zip(texts, metadatas)):
                 chunk_id = metadata.get("chunk_id", f"chunk_{uuid.uuid4()}")
                 chunk_ids.append(chunk_id)
+                
+                # Enhance metadata with table detection
+                enhanced_metadata = metadata.copy()
+                enhanced_metadata.update(self._analyze_chunk_for_tables(text))
+                enhanced_metadatas.append(enhanced_metadata)
 
             # Generate embeddings (with multiprocessing if available and beneficial)
             embeddings = await self._generate_embeddings(texts)
 
-            # Add to collection
+            # Clean metadata to remove None values (ChromaDB doesn't accept None)
+            cleaned_metadatas = []
+            for metadata in enhanced_metadatas:
+                cleaned_metadata = {k: v for k, v in metadata.items() if v is not None}
+                cleaned_metadatas.append(cleaned_metadata)
+            
+            # Add to collection with cleaned metadata
             self.collection.add(
                 embeddings=embeddings,
                 documents=texts,
-                metadatas=metadatas,
+                metadatas=cleaned_metadatas,
                 ids=chunk_ids,
             )
 
@@ -446,6 +459,127 @@ class VectorService:
         except Exception as e:
             logger.error(f"Failed to search similar documents: {e}")
             raise
+
+    def _analyze_chunk_for_tables(self, text: str) -> Dict[str, Any]:
+        """
+        Analyze a text chunk to detect and categorize table content
+        
+        Args:
+            text: Text chunk to analyze
+            
+        Returns:
+            Dictionary with table-related metadata
+        """
+        try:
+            import re
+            
+            analysis = {
+                "contains_table": False,
+                "table_type": "none",
+                "table_indicators": 0,
+                "row_count": 0,
+                "column_indicators": 0,
+                "numeric_data": False,
+                "table_keywords": 0
+            }
+            
+            if not text or len(text.strip()) < 10:
+                return analysis
+            
+            # Detect table markers from our enhanced formatting
+            table_markers = [
+                r'=== TABLE \d+ \(Page \d+\) ===',
+                r'=== DOCX TABLE \d+ ===', 
+                r'=== EXCEL SHEET: .+ ===',
+                r'=== IMAGE TABLE: .+ ==='
+            ]
+            
+            for marker in table_markers:
+                if re.search(marker, text):
+                    analysis["contains_table"] = True
+                    if "PDF" in marker or "Page" in marker:
+                        analysis["table_type"] = "pdf_table"
+                    elif "DOCX" in marker:
+                        analysis["table_type"] = "docx_table"
+                    elif "EXCEL" in marker:
+                        analysis["table_type"] = "excel_sheet"
+                    elif "IMAGE" in marker:
+                        analysis["table_type"] = "image_table"
+                    break
+            
+            # Count table structure indicators
+            headers_match = re.search(r'HEADERS:', text)
+            if headers_match:
+                analysis["table_indicators"] += 5
+                analysis["contains_table"] = True
+            
+            # Count data rows
+            row_matches = re.findall(r'ROW \d+:', text)
+            analysis["row_count"] = len(row_matches)
+            if analysis["row_count"] > 0:
+                analysis["table_indicators"] += analysis["row_count"]
+                analysis["contains_table"] = True
+            
+            # Count column separators (pipe characters)
+            pipe_count = text.count('|')
+            analysis["column_indicators"] = pipe_count
+            if pipe_count >= 3:  # At least a few columns
+                analysis["table_indicators"] += min(pipe_count // 3, 10)  # Cap contribution
+            
+            # Detect numeric data patterns
+            numeric_patterns = [
+                r'\$\d+',  # Currency
+                r'\d+\.\d+',  # Decimals
+                r'\d{1,3}(,\d{3})*',  # Numbers with commas
+                r'\d+%',  # Percentages
+                r'\d{4}',  # Years
+            ]
+            
+            numeric_count = 0
+            for pattern in numeric_patterns:
+                matches = len(re.findall(pattern, text))
+                numeric_count += matches
+            
+            if numeric_count >= 3:
+                analysis["numeric_data"] = True
+                analysis["table_indicators"] += min(numeric_count, 5)
+            
+            # Detect table-related keywords
+            table_keywords = [
+                'total', 'sum', 'amount', 'revenue', 'sales', 'profit', 'loss',
+                'year', 'month', 'quarter', 'date', 'name', 'price', 'quantity',
+                'average', 'minimum', 'maximum', 'count', 'percentage', '%'
+            ]
+            
+            keyword_count = 0
+            text_lower = text.lower()
+            for keyword in table_keywords:
+                if keyword in text_lower:
+                    keyword_count += 1
+            
+            analysis["table_keywords"] = keyword_count
+            if keyword_count >= 2:
+                analysis["table_indicators"] += keyword_count
+            
+            # Final determination
+            if analysis["table_indicators"] >= 5:
+                analysis["contains_table"] = True
+                if not analysis["table_type"] or analysis["table_type"] == "none":
+                    analysis["table_type"] = "detected_table"
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Error analyzing chunk for tables: {e}")
+            return {
+                "contains_table": False,
+                "table_type": "none",
+                "table_indicators": 0,
+                "row_count": 0,
+                "column_indicators": 0,
+                "numeric_data": False,
+                "table_keywords": 0
+            }
 
 
 # Global vector service instance

@@ -7,6 +7,7 @@ import logging
 import uuid
 from datetime import datetime
 import json
+import asyncio
 
 from langchain.schema import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -17,8 +18,10 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from app.core.config import settings
 from app.services.vector_service import vector_service
 from app.services.database_service import database_service
+from app.services.ai_service_manager import ai_service_manager
 from app.models.schemas import ChatMessage, ChatRole, ChatResponse
 from app.core.prompts import get_system_prompt, get_rag_prompt
+from app.core.interfaces import SearchStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,8 @@ class ChatService:
         message: str,
         conversation_id: Optional[str] = None,
         use_context: bool = True,
+        include_web_search: bool = True,
+        selected_search_engine: Optional[str] = None,
         temperature: Optional[float] = None,
     ) -> ChatResponse:
         """
@@ -88,6 +93,8 @@ class ChatService:
             message: User message
             conversation_id: Optional conversation ID for history
             use_context: Whether to use RAG context
+            include_web_search: Whether to include web search in results
+            selected_search_engine: Optional search engine selection
             temperature: Optional temperature override
 
         Returns:
@@ -110,27 +117,61 @@ class ChatService:
             sources = []
             if use_context:
                 logger.info("Retrieving context documents...")
-                context_docs = await self._retrieve_context(message)
+                context_docs = await self._retrieve_context(
+                    message,
+                    include_web_search=include_web_search,
+                    selected_search_engine=selected_search_engine,
+                )
                 logger.info(f"Retrieved {len(context_docs)} context documents")
 
                 # Create sources with proper document IDs
                 sources = []
                 for doc in context_docs:
-                    file_hash = doc["metadata"].get("file_hash", "unknown")
-                    document_id = await self._get_document_id_by_hash(file_hash)
+                    # Handle web search results differently
+                    if (
+                        doc.get("search_type", "").startswith("web")
+                        or doc.get("search_type") == "hybrid_web"
+                    ):
+                        # Web search result
+                        sources.append(
+                            {
+                                "document_id": None,  # No document ID for web results
+                                "filename": doc["metadata"].get(
+                                    "title", "Web Search Result"
+                                ),
+                                "url": doc["metadata"].get("url"),
+                                "source_type": "web_search",
+                                "provider": doc["metadata"].get("source", "Web"),
+                                "chunk_text": (
+                                    doc["text"][:200] + "..."
+                                    if len(doc["text"]) > 200
+                                    else doc["text"]
+                                ),
+                                "similarity_score": doc.get("similarity_score", 0.0),
+                                "is_recent": doc["metadata"].get("is_recent", False),
+                                "authority_score": doc["metadata"].get(
+                                    "authority_score", 0.5
+                                ),
+                            }
+                        )
+                    else:
+                        # Document search result
+                        file_hash = doc["metadata"].get("file_hash", "unknown")
+                        document_id = await self._get_document_id_by_hash(file_hash)
 
-                    sources.append(
-                        {
-                            "document_id": document_id,
-                            "filename": doc["metadata"].get("source", "Unknown"),
-                            "chunk_text": (
-                                doc["text"][:200] + "..."
-                                if len(doc["text"]) > 200
-                                else doc["text"]
-                            ),
-                            "similarity_score": doc.get("similarity_score", 0.0),
-                        }
-                    )
+                        sources.append(
+                            {
+                                "document_id": document_id,
+                                "filename": doc["metadata"].get("source", "Unknown"),
+                                "source_type": "document",
+                                "chunk_text": (
+                                    doc["text"][:200] + "..."
+                                    if len(doc["text"]) > 200
+                                    else doc["text"]
+                                ),
+                                "similarity_score": doc.get("similarity_score", 0.0),
+                            }
+                        )
 
             # Build prompt with context
             logger.info("Building chat prompt...")
@@ -181,6 +222,8 @@ class ChatService:
         message: str,
         conversation_id: Optional[str] = None,
         use_context: bool = True,
+        include_web_search: bool = True,
+        selected_search_engine: Optional[str] = None,
         temperature: Optional[float] = None,
     ):
         """
@@ -212,27 +255,61 @@ class ChatService:
             sources = []
             if use_context:
                 logger.info("STREAM: Retrieving context documents...")
-                context_docs = await self._retrieve_context(message)
+                context_docs = await self._retrieve_context(
+                    message,
+                    include_web_search=include_web_search,
+                    selected_search_engine=selected_search_engine,
+                )
                 logger.info(f"STREAM: Retrieved {len(context_docs)} context documents")
 
                 # Create sources with proper document IDs
                 sources = []
                 for doc in context_docs:
-                    file_hash = doc["metadata"].get("file_hash", "unknown")
-                    document_id = await self._get_document_id_by_hash(file_hash)
+                    # Handle web search results differently
+                    if (
+                        doc.get("search_type", "").startswith("web")
+                        or doc.get("search_type") == "hybrid_web"
+                    ):
+                        # Web search result
+                        sources.append(
+                            {
+                                "document_id": None,  # No document ID for web results
+                                "filename": doc["metadata"].get(
+                                    "title", "Web Search Result"
+                                ),
+                                "url": doc["metadata"].get("url"),
+                                "source_type": "web_search",
+                                "provider": doc["metadata"].get("source", "Web"),
+                                "chunk_text": (
+                                    doc["text"][:200] + "..."
+                                    if len(doc["text"]) > 200
+                                    else doc["text"]
+                                ),
+                                "similarity_score": doc.get("similarity_score", 0.0),
+                                "is_recent": doc["metadata"].get("is_recent", False),
+                                "authority_score": doc["metadata"].get(
+                                    "authority_score", 0.5
+                                ),
+                            }
+                        )
+                    else:
+                        # Document search result
+                        file_hash = doc["metadata"].get("file_hash", "unknown")
+                        document_id = await self._get_document_id_by_hash(file_hash)
 
-                    sources.append(
-                        {
-                            "document_id": document_id,
-                            "filename": doc["metadata"].get("source", "Unknown"),
-                            "chunk_text": (
-                                doc["text"][:200] + "..."
-                                if len(doc["text"]) > 200
-                                else doc["text"]
-                            ),
-                            "similarity_score": doc.get("similarity_score", 0.0),
-                        }
-                    )
+                        sources.append(
+                            {
+                                "document_id": document_id,
+                                "filename": doc["metadata"].get("source", "Unknown"),
+                                "source_type": "document",
+                                "chunk_text": (
+                                    doc["text"][:200] + "..."
+                                    if len(doc["text"]) > 200
+                                    else doc["text"]
+                                ),
+                                "similarity_score": doc.get("similarity_score", 0.0),
+                            }
+                        )
 
             # Send sources first
             if sources:
@@ -303,7 +380,11 @@ class ChatService:
             }
 
     async def _retrieve_context(
-        self, query: str, n_results: int = 5
+        self,
+        query: str,
+        n_results: int = 5,
+        include_web_search: bool = True,
+        selected_search_engine: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve relevant context documents for the query
@@ -311,17 +392,86 @@ class ChatService:
         Args:
             query: User query
             n_results: Number of documents to retrieve
+            include_web_search: Whether to include web search in results
 
         Returns:
             List of relevant documents
         """
         try:
-            # Use hybrid search for better relevance
-            results = vector_service.hybrid_search(query=query, n_results=n_results)
-            return results
+            # Use document service directly for document search (more reliable than AI Service Manager)
+            from app.services.document_service import document_service
+
+            # Get document results using the same service as /api/documents/search
+            document_results = await document_service.search_documents(
+                query, limit=n_results
+            )
+            logger.info(
+                f"Document service returned {len(document_results)} document results"
+            )
+
+            # Convert document results to legacy format
+            legacy_results = []
+            for result in document_results:
+                legacy_results.append(
+                    {
+                        "text": result.get("text", ""),
+                        "metadata": {
+                            "document_id": result.get("metadata", {}).get(
+                                "document_id", ""
+                            ),
+                            "source": result.get("source", "Unknown"),
+                            "filename": result.get("source", "Unknown"),
+                            "chunk_index": result.get("chunk_index", 0),
+                        },
+                        "similarity_score": result.get("similarity_score", 0),
+                        "search_type": "document",
+                    }
+                )
+                logger.debug(
+                    f"Document result: {result.get('source', 'Unknown')}, score: {result.get('similarity_score', 0)}"
+                )
+
+            # Add web search results if AI Service Manager is available and web search is enabled
+            if ai_service_manager.is_initialized and include_web_search:
+                try:
+                    web_search_results = await ai_service_manager.search(
+                        query=query,
+                        strategy=SearchStrategy.AUTO,
+                        k=n_results // 2,  # Split results between documents and web
+                        include_web_search=True,
+                        selected_search_engine=selected_search_engine,
+                    )
+
+                    # Add web results to legacy format
+                    for result in web_search_results:
+                        if result.search_type in ["web_search", "hybrid_web"]:
+                            legacy_results.append(
+                                {
+                                    "text": result.content,
+                                    "metadata": result.metadata,
+                                    "similarity_score": result.score,
+                                    "search_type": result.search_type,
+                                }
+                            )
+
+                    logger.info(f"Added {len(web_search_results)} web search results")
+                except Exception as e:
+                    logger.warning(f"Web search failed: {e}")
+
+            logger.info(
+                f"Retrieved {len(legacy_results)} total results (documents + web)"
+            )
+            return legacy_results
+
         except Exception as e:
             logger.error(f"Failed to retrieve context: {e}")
-            return []
+            # Final fallback to vector service
+            try:
+                results = vector_service.hybrid_search(query=query, n_results=n_results)
+                return results
+            except Exception as fallback_e:
+                logger.error(f"Fallback context retrieval also failed: {fallback_e}")
+                return []
 
     def _build_chat_prompt(
         self,
@@ -344,14 +494,57 @@ class ChatService:
             # Get conversation history
             history = memory.chat_memory.messages
 
-            # Build context string
+            # Build context string with enhanced markdown formatting
             context_text = ""
             if context_docs:
                 context_parts = []
+                web_sources = []
+                doc_sources = []
+
                 for i, doc in enumerate(context_docs, 1):
-                    filename = doc["metadata"].get("filename", "Unknown")
-                    context_parts.append(f"[{i}] From {filename}:\n{doc['text']}")
-                context_text = "\n\n".join(context_parts)
+                    search_type = doc.get("search_type", "")
+
+                    if search_type.startswith("web") or search_type == "hybrid_web":
+                        # Web search result
+                        title = doc["metadata"].get("title", "Web Search Result")
+                        url = doc["metadata"].get("url", "")
+                        provider = doc["metadata"].get("source", "Web")
+                        is_recent = doc["metadata"].get("is_recent", False)
+                        recency_indicator = " 🆕" if is_recent else ""
+
+                        source_info = f"**Web Source {len(web_sources) + 1}**: [{title}]({url}) via {provider}{recency_indicator}"
+                        web_sources.append(source_info)
+                        context_parts.append(
+                            f"### Web Source {len(web_sources)} - {title}\n{doc['text']}"
+                        )
+                    else:
+                        # Document source
+                        filename = doc["metadata"].get("source", "Unknown Document")
+                        doc_sources.append(
+                            f"**Document Source {len(doc_sources) + 1}**: {filename}"
+                        )
+                        context_parts.append(
+                            f"### Document Source {len(doc_sources) + 1} - {filename}\n{doc['text']}"
+                        )
+
+                # Combine sources with headers
+                all_sources = []
+                if doc_sources:
+                    all_sources.append("**📄 Document Sources:**")
+                    all_sources.extend(doc_sources)
+                if web_sources:
+                    all_sources.append("\n**🌐 Web Sources:**")
+                    all_sources.extend(web_sources)
+
+                # Build final context
+                if all_sources:
+                    context_text = (
+                        "\n".join(all_sources)
+                        + "\n\n---\n\n"
+                        + "\n\n".join(context_parts)
+                    )
+                else:
+                    context_text = "\n\n".join(context_parts)
 
             # Use appropriate prompt template
             if context_docs:
@@ -443,6 +636,9 @@ class ChatService:
 
             logger.info(f"STREAM LLM: Completed streaming with {chunk_count} chunks")
 
+        except asyncio.CancelledError:
+            logger.info("STREAM LLM: Streaming cancelled by client")
+            raise
         except Exception as e:
             logger.error(
                 f"STREAM LLM: Failed to generate streaming response: {e}", exc_info=True
@@ -566,7 +762,9 @@ class ChatService:
             # Retrieve context if query provided
             context_docs = []
             if context_query:
-                context_docs = await self._retrieve_context(context_query)
+                context_docs = await self._retrieve_context(
+                    context_query, include_web_search=True
+                )
 
             # Build content generation prompt
             content_prompt = self._build_content_prompt(

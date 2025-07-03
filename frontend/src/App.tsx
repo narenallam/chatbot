@@ -238,6 +238,7 @@ function App() {
   const [fileUploadCallback, setFileUploadCallback] = useState<((file: File, result: any) => void) | null>(null);
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
+  const [currentStreamController, setCurrentStreamController] = useState<AbortController | null>(null);
   const [contextInfo, setContextInfo] = useState<{model_name: string, context_window: number, buffer_size: number} | null>(null);
 
   // Add cache busting utility
@@ -456,11 +457,15 @@ function App() {
     await checkSystemStatus(false);
   };
 
-  const sendMessage = async (message: string) => {
+  const sendMessage = async (message: string, includeWebSearch: boolean = true, selectedSearchEngine: string = 'duckduckgo') => {
     if (!message.trim()) return;
     
     console.log('🚀 Sending message:', message);
     console.log('📝 Current messages count:', messages.length);
+
+    // Create abort controller for this request
+    const abortController = new AbortController();
+    setCurrentStreamController(abortController);
 
     // Set streaming state to prevent UI conflicts
     setIsStreamingResponse(true);
@@ -508,6 +513,9 @@ function App() {
     console.log('💬 Adding messages, new count will be:', newMessages.length);
     setMessages(newMessages);
 
+    let currentContent = '';
+    let documentSources: DocumentSource[] = [];
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/chat/stream`, {
         method: 'POST',
@@ -516,8 +524,11 @@ function App() {
           message,
           conversation_id: conversationId,
           use_context: true,
+          include_web_search: includeWebSearch,
+          selected_search_engine: selectedSearchEngine,
           temperature: 0.7
-        })
+        }),
+        signal: abortController.signal
       });
 
       if (!response.ok) {
@@ -531,8 +542,6 @@ function App() {
 
       const decoder = new TextDecoder();
       let buffer = '';
-      let currentContent = '';
-      let documentSources: DocumentSource[] = [];
       
       // Immediate update function for real-time typewriter effect
       const updateContent = () => {
@@ -590,23 +599,42 @@ function App() {
       });
 
     } catch (error) {
-      const errorMessage: ChatMessage = {
-        id: aiMessageId,
-        role: 'assistant',
-        content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        timestamp: new Date(),
-        neonColor: '#ff4444'
-      };
-      setMessages(prev => {
-        const finalMessages = prev.map(msg => 
-          msg.id === aiMessageId ? errorMessage : msg
-        );
-        updateCurrentConversation(finalMessages);
-        return finalMessages;
-      });
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Request was cancelled
+        const cancelledMessage: ChatMessage = {
+          id: aiMessageId,
+          role: 'assistant',
+          content: currentContent || '⏹️ Generation stopped',
+          timestamp: new Date(),
+          neonColor: '#ffaa00'
+        };
+        setMessages(prev => {
+          const finalMessages = prev.map(msg => 
+            msg.id === aiMessageId ? cancelledMessage : msg
+          );
+          updateCurrentConversation(finalMessages);
+          return finalMessages;
+        });
+      } else {
+        const errorMessage: ChatMessage = {
+          id: aiMessageId,
+          role: 'assistant',
+          content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
+          neonColor: '#ff4444'
+        };
+        setMessages(prev => {
+          const finalMessages = prev.map(msg => 
+            msg.id === aiMessageId ? errorMessage : msg
+          );
+          updateCurrentConversation(finalMessages);
+          return finalMessages;
+        });
+      }
     } finally {
-      // Clear streaming state
+      // Clear streaming state and controller
       setIsStreamingResponse(false);
+      setCurrentStreamController(null);
     }
   };
 
@@ -893,7 +921,14 @@ function App() {
               messages={messages} 
               onSendMessage={sendMessage}
               onFileUpload={handleFileUpload}
-              isLoading={false}
+              isLoading={isStreamingResponse}
+              onStopGeneration={() => {
+                if (currentStreamController) {
+                  currentStreamController.abort();
+                  setCurrentStreamController(null);
+                }
+                setIsStreamingResponse(false);
+              }}
               contextInfo={contextInfo}
             />
           </PanelContainer>
