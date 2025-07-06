@@ -86,9 +86,9 @@ manager = ConnectionManager()
 
 # Create FastAPI app
 app = FastAPI(
-    title="Personal Assistant AI Chatbot",
+    title=settings.app_name,
     description="AI chatbot with document ingestion and RAG capabilities",
-    version="1.0.0",
+    version=settings.app_version,
 )
 
 # Add no-cache middleware first
@@ -97,10 +97,10 @@ app.add_middleware(NoCacheMiddleware)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
 )
 
 
@@ -218,9 +218,10 @@ async def startup_event():
 async def root():
     """Root endpoint"""
     return {
-        "message": "Personal Assistant AI Chatbot API",
-        "version": "1.0.0",
+        "message": f"{settings.app_name} API",
+        "version": settings.app_version,
         "status": "active",
+        "environment": settings.environment,
     }
 
 
@@ -231,7 +232,7 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=settings.reload)
 
 # Make manager available globally for other modules
 app.state.ws_manager = manager

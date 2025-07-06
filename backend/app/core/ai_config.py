@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.core.interfaces import AIConfig, ConfigManager, ServiceFactory
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +26,24 @@ DEFAULT_CONFIGS = {
     "local_llama_stack": {
         "embedding_model": "sentence_transformers",
         "embedding_config": {
-            "model_name": "sentence-transformers/all-mpnet-base-v2",
-            "device": "cpu",
-            "batch_size": 32,
+            "model_name": settings.embedding_model,
+            "device": settings.embedding_device,
+            "batch_size": settings.embedding_batch_size,
         },
         "vector_database": "chromadb",
         "vector_config": {
-            "collection_name": "documents_ai_manager",
-            "persist_directory": "./embeddings",
+            "collection_name": settings.chroma_collection_name,
+            "persist_directory": settings.chroma_db_path,
             "distance_metric": "cosine",
         },
         "precise_retriever": "bm25",
         "precise_config": {"k1": 1.2, "b": 0.75},
         "llm_model": "ollama",
         "llm_config": {
-            "base_url": "http://localhost:11434",
-            "model_name": "llama3:8b-instruct-q8_0",
-            "temperature": 0.7,
-            "max_tokens": 2048,
+            "base_url": settings.ollama_base_url,
+            "model_name": settings.ollama_model,
+            "temperature": settings.default_temperature,
+            "max_tokens": settings.max_tokens,
         },
         "search_config": {
             "table_confidence_threshold": 0.6,
@@ -79,7 +80,7 @@ DEFAULT_CONFIGS = {
                 "fallback_enabled": False,
                 "providers": {
                     "serpapi": {
-                        "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+                        "api_key": settings.serpapi_api_key or "",
                         "timeout": 15,
                         "max_results": 10,
                         "location": "United States",
@@ -92,8 +93,8 @@ DEFAULT_CONFIGS = {
     "openai_stack": {
         "embedding_model": "openai",
         "embedding_config": {
-            "api_key": os.getenv("OPENAI_API_KEY"),
-            "model_name": "text-embedding-3-large",
+            "api_key": settings.openai_api_key,
+            "model_name": settings.openai_embedding_model,
             "batch_size": 100,
         },
         "vector_database": "chromadb",
@@ -147,7 +148,7 @@ DEFAULT_CONFIGS = {
                 "fallback_enabled": False,
                 "providers": {
                     "serpapi": {
-                        "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+                        "api_key": settings.serpapi_api_key or "",
                         "timeout": 15,
                         "max_results": 10,
                         "location": "United States",
@@ -203,7 +204,7 @@ DEFAULT_CONFIGS = {
                 "fallback_enabled": False,
                 "providers": {
                     "serpapi": {
-                        "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+                        "api_key": settings.serpapi_api_key or "",
                         "timeout": 15,
                         "max_results": 10,
                         "location": "United States",
@@ -260,7 +261,7 @@ DEFAULT_CONFIGS = {
                 "fallback_enabled": False,
                 "providers": {
                     "serpapi": {
-                        "api_key": "e51c4394a63d71148aa5cc386e4d5586ba49e0e4ea65056b88a01f78da49016c",
+                        "api_key": settings.serpapi_api_key or "",
                         "timeout": 15,
                         "max_results": 10,
                         "location": "United States",

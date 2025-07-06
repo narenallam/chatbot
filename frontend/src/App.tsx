@@ -8,6 +8,7 @@ import { ConversationPanel } from './components/ConversationPanel';
 import { StatusPanel } from './components/StatusPanel';
 import { Console } from './components/Console';
 import { GlobalStyles } from './styles/GlobalStyles';
+import { config } from './config/config';
 
 export interface ChatMessage {
   id: string;
@@ -208,7 +209,7 @@ const PanelContainer = styled(Panel)`
   flex-direction: column;
 `;
 
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = config.api.url;
 
 const NEON_COLORS = [
   '#00ffff', // Cyan
@@ -806,7 +807,7 @@ function App() {
     // Or, if Console supports a state update, use that
     // Here, we send to the backend WebSocket endpoint
     try {
-      const ws = new WebSocket('ws://localhost:8000/ws/logs');
+      const ws = new WebSocket(config.buildWsUrl('/ws/logs'));
       ws.onopen = () => {
         ws.send(JSON.stringify({
           type: 'log',
