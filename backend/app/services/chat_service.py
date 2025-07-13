@@ -169,8 +169,11 @@ class ChatService:
                         )
                     else:
                         # Document search result
-                        file_hash = doc["metadata"].get("file_hash", "unknown")
-                        document_id = await self._get_document_id_by_hash(file_hash)
+                        # Use document_id directly from metadata if available, otherwise look up by file_hash
+                        document_id = doc["metadata"].get("document_id")
+                        if not document_id:
+                            file_hash = doc["metadata"].get("file_hash", "unknown")
+                            document_id = await self._get_document_id_by_hash(file_hash)
 
                         sources.append(
                             {
@@ -185,6 +188,9 @@ class ChatService:
                                 "similarity_score": doc.get("similarity_score", 0.0),
                             }
                         )
+
+                # Deduplicate sources to avoid multiple entries for the same document
+                sources = self._deduplicate_sources(sources)
 
             # Build prompt with context
             logger.info("Building chat prompt...")
@@ -322,8 +328,11 @@ class ChatService:
                         )
                     else:
                         # Document search result
-                        file_hash = doc["metadata"].get("file_hash", "unknown")
-                        document_id = await self._get_document_id_by_hash(file_hash)
+                        # Use document_id directly from metadata if available, otherwise look up by file_hash
+                        document_id = doc["metadata"].get("document_id")
+                        if not document_id:
+                            file_hash = doc["metadata"].get("file_hash", "unknown")
+                            document_id = await self._get_document_id_by_hash(file_hash)
 
                         sources.append(
                             {
@@ -338,6 +347,9 @@ class ChatService:
                                 "similarity_score": doc.get("similarity_score", 0.0),
                             }
                         )
+
+                # Deduplicate sources to avoid multiple entries for the same document
+                sources = self._deduplicate_sources(sources)
 
             # Send sources first
             if sources:
@@ -931,8 +943,10 @@ class ChatService:
 Please create high-quality content that meets these requirements."""
 
     async def _get_document_id_by_hash(self, file_hash: str) -> str:
-        """Get document ID by file hash"""
+        """Get document ID by file hash or document_id from metadata"""
         try:
+            # First, try to get document_id directly from the metadata if it's available
+            # This is more efficient than searching through all files
             files = database_service.get_files()
 
             for file in files:
@@ -973,6 +987,29 @@ Please create high-quality content that meets these requirements."""
             logger.error(
                 f"Failed to restore context for conversation {conversation_id}: {e}"
             )
+
+    def _deduplicate_sources(
+        self, sources: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Deduplicate sources based on document_id or URL.
+        This is useful for avoiding multiple entries of the same document/web page.
+        """
+        seen_sources = set()
+        deduplicated_sources = []
+
+        for source in sources:
+            # Use document_id if available, otherwise use URL
+            identifier = source.get("document_id") or source.get("url")
+
+            if identifier and identifier in seen_sources:
+                logger.debug(f"Skipping duplicate source: {source}")
+                continue
+
+            seen_sources.add(identifier)
+            deduplicated_sources.append(source)
+
+        return deduplicated_sources
 
 
 # Global chat service instance

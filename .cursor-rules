@@ -1,0 +1,39 @@
+# AI Chatbot Development Rules
+
+service_management:
+  description: "ALWAYS use the restart script for service management"
+  rules:
+    - "Use ./restart.sh --backend to restart the backend"
+    - "Use ./restart.sh --frontend to restart the frontend"
+    - "NEVER manually start services with uvicorn, npm start, or ollama commands directly"
+    - "The restart script handles virtual environment activation, directory navigation, dependency checks, and proper service startup order"
+    - "ALWAYS check service status first with ./restart.sh --status before restarting"
+    - "Only restart services if they are not running - frontend and backend run in hot reload mode"
+    - "Code changes take effect immediately due to hot reload - no restart needed for most changes"
+  
+  available_commands:
+    - "./restart.sh --backend - Restart FastAPI backend only"
+    - "./restart.sh --frontend - Restart React frontend only"
+    - "./restart.sh --ollama - Restart Ollama API server only"
+    - "./restart.sh --all - Restart all services (default)"
+    - "./restart.sh --status - Check service status"
+  
+  benefits:
+    - "Prevents wrong directory issues"
+    - "Prevents missing virtual environment activation"
+    - "Prevents environment setup confusion"
+    - "Saves time by avoiding unnecessary restarts"
+    - "Hot reload means immediate code changes"
+
+development_workflow:
+  check_status: "./restart.sh --status"
+  backend: "Make changes, then ./restart.sh --backend (only if not running)"
+  frontend: "Make changes, then ./restart.sh --frontend (only if not running)"
+  full_system: "./restart.sh --all"
+  status_check: "./restart.sh --status"
+
+hot_reload_benefits:
+  description: "Services run in hot reload mode for immediate development"
+  backend: "FastAPI with --reload flag - code changes apply instantly"
+  frontend: "React with npm start - code changes apply instantly"
+  restart_only_when: "Service crashes, dependency changes, or service not running"

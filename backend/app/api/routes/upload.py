@@ -230,6 +230,10 @@ async def upload_documents(files: List[UploadFile] = File(...)):
                 result["processing_strategy"] = processing_strategy
                 result["service_used"] = service_choice
 
+                # Fix: Add document_id field for frontend compatibility
+                if "file_id" in result:
+                    result["document_id"] = result["file_id"]
+
                 # Log completion (only errors - success is logged by services)
                 if result["status"] != "success":
                     await safe_log_to_websocket(

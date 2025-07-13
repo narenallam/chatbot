@@ -30,7 +30,7 @@ This is a **state-of-the-art Personal Assistant AI Chatbot** designed for intell
 - 🤖 **Dual LLM Support** (Local LLaMA via Ollama + OpenAI fallback)
 - 🔍 **Hybrid RAG Search** (Semantic + Keyword matching with 70/30 weighting)
 - 💬 **Real-time Streaming** chat responses with cancellation support
-- 🌐 **Web Search Integration** with DuckDuckGo and provider fallbacks
+- 🌐 **Web Search Integration** with SerpAPI and provider fallbacks
 - 🖼️ **OCR with Table Detection** for images and scanned documents
 - 🔒 **Privacy-focused** with complete local processing capabilities
 - 📱 **Enhanced UI** with improved copy functionality and responsive design

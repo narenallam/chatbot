@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader, RotateCcw, FileImage, FileSpreadsheet, Presentation, Eye, EyeOff, Download, ExternalLink, Copy, Info, XCircle } from 'lucide-react';
 import { DocumentDetails } from './DocumentDetails';
+import { config } from '../config/config';
 
 interface UploadedDocument {
   id: string;
@@ -701,7 +702,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
   // WebSocket connection for real-time progress
   useEffect(() => {
     const connectWebSocket = () => {
-      const wsUrl = `ws://localhost:8000/ws/logs`;
+      const wsUrl = config.buildWsUrl('/ws/logs');
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
@@ -1187,7 +1188,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
     setPreviewStates(prev => new Map(prev).set(docId, { loading: true, error: null, url: null }));
 
     try {
-      const response = await fetch(`http://localhost:8000/api/documents/original/${docId}`);
+      const response = await fetch(`${config.api.url}/api/documents/original/${docId}`);
       if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -1202,7 +1203,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
 
   const downloadDocument = async (docId: string, filename: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/documents/original/${docId}`);
+      const response = await fetch(`${config.api.url}/api/documents/original/${docId}`);
       if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -1222,7 +1223,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
   };
 
   const openInNewTab = async (docId: string) => {
-    const previewUrl = `http://localhost:8000/api/documents/original/${docId}`;
+    const previewUrl = `${config.api.url}/api/documents/original/${docId}`;
     window.open(previewUrl, '_blank');
   };
 

@@ -507,7 +507,9 @@ class DatabaseService:
                             "new_filename": row[4],
                             "file_size": row[5],
                             "content_type": row[6],
-                            "status": row[7],
+                            "status": (
+                                row[7] if row[7] else "ready"
+                            ),  # Default to "ready" if status is NULL
                             "metadata": json.loads(row[8]) if row[8] else {},
                         }
                     )

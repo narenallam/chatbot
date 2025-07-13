@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { FileText, Hash, Calendar, HardDrive, FileImage, FileSpreadsheet, Presentation, CheckCircle, AlertCircle, Info, Eye, Download, ExternalLink, Loader } from 'lucide-react';
+import { config } from '../config/config';
 
 interface DocumentDetailsProps {
   document: {
@@ -394,7 +395,7 @@ export const DocumentDetails: React.FC<DocumentDetailsProps> = ({ document, onCl
     setPreviewState({ loading: true, error: null, url: null });
 
     try {
-      const response = await fetch(`http://localhost:8000/api/documents/original/${document.id}`);
+      const response = await fetch(`${config.api.url}/api/documents/original/${document.id}`);
       if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -429,7 +430,7 @@ export const DocumentDetails: React.FC<DocumentDetailsProps> = ({ document, onCl
 
   const downloadDocument = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/documents/original/${document.id}`);
+      const response = await fetch(`${config.api.url}/api/documents/original/${document.id}`);
       if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -449,7 +450,7 @@ export const DocumentDetails: React.FC<DocumentDetailsProps> = ({ document, onCl
   };
 
   const openInNewTab = () => {
-    const previewUrl = `http://localhost:8000/api/documents/original/${document.id}`;
+    const previewUrl = `${config.api.url}/api/documents/original/${document.id}`;
     window.open(previewUrl, '_blank');
   };
 

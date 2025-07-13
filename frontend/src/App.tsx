@@ -723,7 +723,7 @@ function App() {
               // Add to uploaded documents list
               if (fileResult.status === 'success') {
                 const newDoc: UploadedDocument = {
-                  id: fileResult.document_id?.toString() || Date.now().toString() + Math.random().toString(36),
+                  id: fileResult.file_id?.toString() || fileResult.document_id?.toString() || Date.now().toString() + Math.random().toString(36),
                   name: matchingFile.name,
                   size: matchingFile.size,
                   type: matchingFile.type,

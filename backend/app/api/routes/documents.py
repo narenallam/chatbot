@@ -416,18 +416,31 @@ def image_to_pdf(image_content: bytes, title: str = "Image") -> bytes:
 
         # Create temporary file for the image
         import tempfile
+        import os
 
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
-            image.save(temp_file.name, format="JPEG", quality=85)
-            story.append(
-                ReportLabImage(
-                    temp_file.name, width=display_width, height=display_height
+        temp_file_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+                temp_file_path = temp_file.name
+                image.save(temp_file_path, format="JPEG", quality=85)
+                story.append(
+                    ReportLabImage(
+                        temp_file_path, width=display_width, height=display_height
+                    )
                 )
-            )
 
-        doc.build(story)
-        buffer.seek(0)
-        return buffer.getvalue()
+            doc.build(story)
+            buffer.seek(0)
+            return buffer.getvalue()
+        finally:
+            # Clean up temporary file
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to clean up temporary file {temp_file_path}: {cleanup_error}"
+                    )
 
     except Exception as e:
         logger.error(f"Failed to convert image to PDF: {e}")
