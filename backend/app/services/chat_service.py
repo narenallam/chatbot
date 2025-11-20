@@ -20,7 +20,7 @@ from app.services.vector_service import vector_service
 from app.services.database_service import database_service
 from app.services.ai_service_manager import ai_service_manager
 from app.models.schemas import ChatMessage, ChatRole, ChatResponse
-from app.core.prompts import get_system_prompt, get_rag_prompt
+from app.core.prompts import get_system_prompt, get_rag_prompt, get_web_only_prompt, get_hybrid_synthesis_prompt
 from app.core.interfaces import SearchStrategy
 
 logger = logging.getLogger(__name__)
@@ -194,7 +194,7 @@ class ChatService:
 
             # Build prompt with context
             logger.info("Building chat prompt...")
-            prompt = self._build_chat_prompt(message, context_docs, memory)
+            prompt = self._build_chat_prompt(message, context_docs, memory, search_mode)
 
             # Set temperature if provided
             if temperature is not None:
@@ -362,7 +362,7 @@ class ChatService:
 
             # Build prompt with context
             logger.info("STREAM: Building chat prompt...")
-            prompt = self._build_chat_prompt(message, context_docs, memory)
+            prompt = self._build_chat_prompt(message, context_docs, memory, search_mode)
 
             # Set temperature if provided
             if temperature is not None:
@@ -484,22 +484,59 @@ class ChatService:
                 f"Web search check: AI Manager initialized={ai_service_manager.is_initialized}, include_web_search={include_web_search}"
             )
 
-            # Initialize AI Service Manager if not already initialized
-            if not ai_service_manager.is_initialized and include_web_search:
-                logger.info("Initializing AI Service Manager for web search...")
-                try:
-                    from app.core.startup import initialize_ai_services
+            # Initialize web search components if not already initialized
+            if include_web_search:
+                if not ai_service_manager.is_initialized:
+                    logger.info("Initializing AI Service Manager for web search...")
+                    try:
+                        from app.core.startup import initialize_ai_services
 
-                    initialization_result = await initialize_ai_services()
-                    logger.info(
-                        f"AI Service Manager initialization: {initialization_result}"
-                    )
-                except Exception as init_e:
-                    logger.warning(f"Failed to initialize AI Service Manager: {init_e}")
-            if ai_service_manager.is_initialized and include_web_search:
+                        initialization_result = await initialize_ai_services()
+                        logger.info(
+                            f"AI Service Manager initialization result: {initialization_result}"
+                        )
+                        if not initialization_result:
+                            logger.warning("⚠️ Full AI Service Manager initialization failed, attempting web search only initialization...")
+                            # Try to initialize just web search components
+                            try:
+                                from app.core.ai_config import ai_config_manager
+                                config = await ai_config_manager.get_recommended_config()
+                                await ai_service_manager._initialize_web_search_components(config)
+                                logger.info("✅ Web search components initialized independently")
+                            except Exception as web_init_e:
+                                logger.error(f"❌ Failed to initialize web search components: {web_init_e}", exc_info=True)
+                    except Exception as init_e:
+                        logger.error(f"Failed to initialize AI Service Manager: {init_e}", exc_info=True)
+                        
+                # Check if web search components are available even if full init failed
+                if not ai_service_manager.web_search_agent or not ai_service_manager.query_analyzer:
+                    logger.warning("⚠️ Web search components not available, attempting to initialize them...")
+                    try:
+                        from app.core.ai_config import ai_config_manager
+                        config = await ai_config_manager.get_recommended_config()
+                        await ai_service_manager._initialize_web_search_components(config)
+                        logger.info("✅ Web search components initialized successfully")
+                    except Exception as web_init_e:
+                        logger.error(f"❌ Failed to initialize web search components: {web_init_e}", exc_info=True)
+            
+            # Check if web search components are available (even if full init failed)
+            has_web_agent = ai_service_manager.web_search_agent is not None if hasattr(ai_service_manager, 'web_search_agent') else False
+            has_query_analyzer = ai_service_manager.query_analyzer is not None if hasattr(ai_service_manager, 'query_analyzer') else False
+            can_perform_web_search = has_web_agent and has_query_analyzer
+            
+            # Log detailed status for debugging
+            logger.info(
+                f"Web search status - initialized: {ai_service_manager.is_initialized}, "
+                f"include_web_search: {include_web_search}, "
+                f"has_web_agent: {has_web_agent}, "
+                f"has_query_analyzer: {has_query_analyzer}, "
+                f"can_perform_web_search: {can_perform_web_search}"
+            )
+            
+            if can_perform_web_search and include_web_search:
                 try:
                     logger.info(
-                        f"Performing web search: query='{query}', engine='{selected_search_engine}'"
+                        f"🔍 Performing web search: query='{query}', engine='{selected_search_engine}', mode='{search_mode}'"
                     )
                     web_search_results = await ai_service_manager.search(
                         query=query,
@@ -514,8 +551,18 @@ class ChatService:
                     )
 
                     logger.info(
-                        f"Web search returned {len(web_search_results)} total results"
+                        f"✅ Web search completed - returned {len(web_search_results)} total results"
                     )
+                    if len(web_search_results) == 0:
+                        logger.warning(f"⚠️ No web search results returned for query: '{query}'")
+                    else:
+                        logger.info(f"📊 Web search results breakdown:")
+                        for i, result in enumerate(web_search_results[:3]):  # Log first 3 results
+                            logger.info(
+                                f"  Result {i+1}: type={result.search_type}, "
+                                f"title={result.metadata.get('title', 'N/A')[:50]}, "
+                                f"url={result.metadata.get('url', 'N/A')[:50]}"
+                            )
 
                     # Add web results to legacy format with enhanced content processing
                     web_results_added = 0
@@ -573,7 +620,15 @@ class ChatService:
                         f"Added {web_results_added} web search results out of {len(web_search_results)} total"
                     )
                 except Exception as e:
-                    logger.warning(f"Web search failed: {e}", exc_info=True)
+                    logger.error(f"❌ Web search failed: {e}", exc_info=True)
+                    import traceback
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
+            else:
+                if not can_perform_web_search:
+                    logger.warning(f"⚠️ Web search components not available - web search skipped")
+                    logger.warning(f"   Web agent: {has_web_agent}, Query analyzer: {has_query_analyzer}")
+                if not include_web_search:
+                    logger.debug(f"Web search disabled - include_web_search={include_web_search}")
 
             logger.info(
                 f"Retrieved {len(legacy_results)} total results (documents + web)"
@@ -582,12 +637,16 @@ class ChatService:
 
         except Exception as e:
             logger.error(f"Failed to retrieve context: {e}")
-            # Final fallback to vector service
-            try:
-                results = vector_service.hybrid_search(query=query, n_results=n_results)
-                return results
-            except Exception as fallback_e:
-                logger.error(f"Fallback context retrieval also failed: {fallback_e}")
+            # Final fallback to vector service - but skip in web-only mode
+            if search_mode != "web":
+                try:
+                    results = vector_service.hybrid_search(query=query, n_results=n_results)
+                    return results
+                except Exception as fallback_e:
+                    logger.error(f"Fallback context retrieval also failed: {fallback_e}")
+                    return []
+            else:
+                logger.warning("Web-only mode: Skipping document fallback")
                 return []
 
     def _build_chat_prompt(
@@ -595,6 +654,7 @@ class ChatService:
         message: str,
         context_docs: List[Dict[str, Any]],
         memory: ConversationBufferWindowMemory,
+        search_mode: str = "hybrid",
     ) -> str:
         """
         Build the chat prompt with context and conversation history
@@ -603,6 +663,7 @@ class ChatService:
             message: User message
             context_docs: Retrieved context documents
             memory: Conversation memory
+            search_mode: Search mode ("documents", "web", or "hybrid")
 
         Returns:
             Formatted prompt string
@@ -663,19 +724,49 @@ class ChatService:
                 else:
                     context_text = "\n\n".join(context_parts)
 
-            # Use appropriate prompt template
+            # Use appropriate prompt template based on search mode
             if context_docs:
-                prompt_template = get_rag_prompt()
+                if search_mode == "web":
+                    # Web-only mode: use web-only prompt that forbids using documents/internal knowledge
+                    prompt_template = get_web_only_prompt()
+                    logger.info("Using web-only prompt template (forbids documents/internal knowledge)")
+                elif search_mode == "hybrid":
+                    # Hybrid mode: check for relevancy and use synthesis prompt if relevant
+                    has_relevancy = self._detect_relevancy(context_docs)
+                    if has_relevancy:
+                        prompt_template = get_hybrid_synthesis_prompt()
+                        logger.info("Using hybrid synthesis prompt (detected relevancy between documents and web sources)")
+                    else:
+                        prompt_template = get_rag_prompt()
+                        logger.info("Using standard RAG prompt for hybrid mode (no significant relevancy detected)")
+                else:
+                    # Documents-only mode: use standard RAG prompt
+                    prompt_template = get_rag_prompt()
+                    logger.info(f"Using RAG prompt template for {search_mode} mode")
+                
                 return prompt_template.format(
                     context=context_text,
                     chat_history=self._format_chat_history(history),
                     question=message,
                 )
             else:
-                prompt_template = get_system_prompt()
-                return prompt_template.format(
-                    chat_history=self._format_chat_history(history), question=message
-                )
+                # No context results - handle based on search mode
+                if search_mode == "web":
+                    # Web-only mode: still use web-only prompt even with no results
+                    # This ensures the model knows to only use web sources and says so when no results found
+                    prompt_template = get_web_only_prompt()
+                    logger.info("Web-only mode with no results: using web-only prompt to indicate no web sources found")
+                    return prompt_template.format(
+                        context="(No web search results were found for this query)",
+                        chat_history=self._format_chat_history(history),
+                        question=message,
+                    )
+                else:
+                    # Other modes: use system prompt when no context
+                    prompt_template = get_system_prompt()
+                    return prompt_template.format(
+                        chat_history=self._format_chat_history(history), question=message
+                    )
 
         except Exception as e:
             logger.error(f"Failed to build chat prompt: {e}")
@@ -1010,6 +1101,128 @@ Please create high-quality content that meets these requirements."""
             deduplicated_sources.append(source)
 
         return deduplicated_sources
+
+    def _detect_relevancy(
+        self, context_docs: List[Dict[str, Any]]
+    ) -> bool:
+        """
+        Detect if there's relevancy between document and web search results.
+        Uses keyword overlap, entity matching, and semantic similarity indicators.
+        
+        Args:
+            context_docs: List of context documents (both document and web sources)
+            
+        Returns:
+            True if relevancy is detected, False otherwise
+        """
+        try:
+            # Separate document and web sources
+            doc_texts = []
+            web_texts = []
+            doc_metadata = []
+            web_metadata = []
+            
+            for doc in context_docs:
+                search_type = doc.get("search_type", "")
+                text = doc.get("text", "").lower()
+                metadata = doc.get("metadata", {})
+                
+                if search_type.startswith("web") or search_type == "hybrid_web":
+                    web_texts.append(text)
+                    web_metadata.append(metadata)
+                else:
+                    doc_texts.append(text)
+                    doc_metadata.append(metadata)
+            
+            # If we don't have both types, no relevancy to detect
+            if not doc_texts or not web_texts:
+                logger.debug("No relevancy check: missing document or web sources")
+                return False
+            
+            # Method 1: Extract significant keywords and entities from documents
+            doc_keywords = set()
+            doc_entities = set()  # Names, organizations, specific terms
+            
+            for text in doc_texts:
+                words = text.split()
+                for word in words:
+                    # Remove punctuation
+                    clean_word = word.strip('.,!?;:()[]{}"\'').lower()
+                    if len(clean_word) < 3:
+                        continue
+                    
+                    # Collect all significant words
+                    if len(clean_word) > 3:
+                        doc_keywords.add(clean_word)
+                    
+                    # Look for potential entities (capitalized in original, or common patterns)
+                    # This is a simplified check - in production you'd use NER
+                    if len(clean_word) > 4:
+                        doc_keywords.add(clean_word)
+            
+            # Method 2: Extract titles/names from metadata
+            for meta in doc_metadata:
+                title = meta.get("title", "").lower()
+                filename = meta.get("filename", "").lower()
+                source = meta.get("source", "").lower()
+                
+                # Extract words from titles/filenames (likely contain key entities)
+                for word in (title + " " + filename + " " + source).split():
+                    clean_word = word.strip('.,!?;:()[]{}"\'').lower()
+                    if len(clean_word) > 3:
+                        doc_entities.add(clean_word)
+                        doc_keywords.add(clean_word)
+            
+            # Method 3: Check web texts for keyword overlap
+            total_overlap_score = 0
+            entity_matches = 0
+            
+            for i, web_text in enumerate(web_texts):
+                web_words = set(web_text.split())
+                web_meta = web_metadata[i] if i < len(web_metadata) else {}
+                
+                # Check keyword overlap
+                keyword_overlap = len(doc_keywords.intersection(web_words))
+                keyword_score = keyword_overlap / max(len(doc_keywords), 1) if doc_keywords else 0
+                
+                # Check entity matches in web title/URL
+                web_title = web_meta.get("title", "").lower()
+                web_url = web_meta.get("url", "").lower()
+                web_text_combined = (web_title + " " + web_url + " " + web_text).lower()
+                
+                entity_match_count = sum(1 for entity in doc_entities if entity in web_text_combined)
+                entity_score = entity_match_count / max(len(doc_entities), 1) if doc_entities else 0
+                
+                # Combined score for this web source
+                source_score = (keyword_score * 0.6) + (entity_score * 0.4)
+                total_overlap_score += source_score
+                
+                if entity_match_count > 0:
+                    entity_matches += 1
+            
+            # Average relevancy across all web sources
+            avg_relevancy = total_overlap_score / len(web_texts) if web_texts else 0
+            
+            # Additional check: if multiple web sources match entities, higher confidence
+            entity_match_ratio = entity_matches / len(web_texts) if web_texts else 0
+            
+            # Consider relevant if:
+            # - Average relevancy > 0.12 (12% keyword overlap) OR
+            # - Entity matches in >30% of web sources
+            is_relevant = avg_relevancy > 0.12 or entity_match_ratio > 0.3
+            
+            logger.info(
+                f"🔍 Relevancy detection: doc_sources={len(doc_texts)}, web_sources={len(web_texts)}, "
+                f"avg_relevancy={avg_relevancy:.3f}, entity_match_ratio={entity_match_ratio:.3f}, "
+                f"is_relevant={is_relevant}"
+            )
+            
+            return is_relevant
+            
+        except Exception as e:
+            logger.warning(f"Error detecting relevancy: {e}", exc_info=True)
+            # Default to False on error (use standard prompt)
+            return False
 
 
 # Global chat service instance

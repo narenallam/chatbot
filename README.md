@@ -1,4 +1,4 @@
-# 🤖 AI MATE - Intelligent Document Chatbot with Advanced Table Processing
+# 🤖 AI MATE - Intelligent Personal Assistant Chatbot
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://python.org) [![React](https://img.shields.io/badge/React-18.2-blue.svg)](https://reactjs.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com) [![Ollama](https://img.shields.io/badge/Ollama-Local%20AI-orange.svg)](https://ollama.ai) [![LangChain](https://img.shields.io/badge/LangChain-0.3-purple.svg)](https://langchain.com) [![ChromaDB](https://img.shields.io/badge/ChromaDB-1.0-red.svg)](https://trychroma.com)
 
@@ -21,47 +21,53 @@
 
 ## 🌟 Overview & Key Features
 
-This is a **state-of-the-art Personal Assistant AI Chatbot** designed for intelligent document interaction with advanced table processing capabilities. Built with modern full-stack architecture combining privacy-first local AI with sophisticated document understanding.
+AI MATE is a **state-of-the-art Personal Assistant AI Chatbot** designed for intelligent document interaction with advanced capabilities. Built with modern full-stack architecture combining privacy-first local AI with sophisticated document understanding and web search integration.
 
 ### ✨ Core Capabilities
 
 - 📄 **Multi-format Document Processing** (PDF, DOCX, PPTX, Excel, Images, Code files)
 - 📊 **Advanced Table Processing** with structure preservation and intelligent chunking
-- 🤖 **Dual LLM Support** (Local LLaMA via Ollama + OpenAI fallback)
-- 🔍 **Hybrid RAG Search** (Semantic + Keyword matching with 70/30 weighting)
+- 🤖 **Dual LLM Support** (Local LLaMA 3.1 8B via Ollama + OpenAI fallback)
+- 🔍 **Three-Mode Search System**:
+  - **Documents Only**: RAG with internal knowledge base
+  - **Web Search Only**: Real-time web search via SerpAPI/Google
+  - **Both (Hybrid)**: Intelligent synthesis of documents + web results
 - 💬 **Real-time Streaming** chat responses with cancellation support
-- 🌐 **Web Search Integration** with SerpAPI and provider fallbacks
+- 🌐 **Web Search Integration** with SerpAPI, Brave Search, and DuckDuckGo fallbacks
+- 🧠 **Intelligent Synthesis**: Automatically merges relevant document and web information
 - 🖼️ **OCR with Table Detection** for images and scanned documents
 - 🔒 **Privacy-focused** with complete local processing capabilities
 - 📱 **Enhanced UI** with improved copy functionality and responsive design
 - ⏹️ **Stream Control** with stop generation capabilities
 
-### 🆕 Latest Improvements (December 2024)
+### 🆕 Latest Features (January 2025)
 
-#### **Phase 1 - Table Processing** ✅ Complete
+#### **Three-Mode Search System** ✅ Complete
+- **Documents Only Mode**: Traditional RAG with internal knowledge base
+- **Web Search Only Mode**: Real-time web search via SerpAPI/Google (no document access)
+- **Both (Hybrid) Mode**: Intelligent synthesis of documents + web results
+  - **Relevancy Detection**: Automatically detects when document and web sources discuss the same topic
+  - **Intelligent Synthesis**: Merges relevant information into unified responses instead of separate listings
+  - **Smart Prompt Selection**: Uses synthesis prompts when relevancy is detected
+
+#### **Enhanced Web Search** ✅ Complete
+- **Multi-Provider Support**: SerpAPI (Google), Brave Search, DuckDuckGo with intelligent fallbacks
+- **Query Analysis**: Intelligent routing and provider selection based on query intent
+- **Independent Initialization**: Web search works even if document search fails
+- **Comprehensive Logging**: Full traceability from query → API call → results → LLM → UI
+
+#### **Table Processing & ColBERT** ✅ Complete
 - **90% better table structure preservation** in PDFs, Word docs, and Excel files
-- **3x improvement in table-based query accuracy** through intelligent chunking
-- **Complete spreadsheet processing** (all rows, not just samples)
-- **Enhanced OCR table detection** for images containing tabular data
-- **Table-aware vector embeddings** with rich metadata for better search
-
-#### **Phase 2 - ColBERT Integration & Web Search** ✅ Complete
 - **ColBERT indexing service** for precise table cell retrieval (5x faster queries)
 - **Hybrid search system** combining ChromaDB + ColBERT + Web search
 - **Advanced table query detection** with numerical range processing (95% accuracy)
-- **ColBERT-specific metadata indexing** for enhanced table understanding
-- **Professional prompt engineering** with 18 safety and quality guidelines
-- **Intelligent web search integration** with DuckDuckGo API and provider fallbacks
-- **Enhanced markdown formatting** for structured LLM responses
-- **Agentic search system** with query analysis and strategy optimization
-- **Source attribution** with web links, recency indicators, and authority scores
+- **Complete spreadsheet processing** (all rows, not just samples)
 
-#### **Phase 3 - UI/UX Enhancements** ✅ Complete
+#### **UI/UX Enhancements** ✅ Complete
 - **Stream cancellation** with stop generation button functionality
 - **Improved copy functionality** with unified icon design across all code blocks
 - **Enhanced message layout** with optimized spacing and visual hierarchy
 - **Responsive design improvements** with better mobile compatibility
-- **Visual refinements** including darker user message backgrounds and spacing
 
 ---
 
@@ -348,7 +354,7 @@ brew install ollama  # macOS
 ollama serve
 
 # Pull the recommended model
-ollama pull llama3:8b-instruct-q8_0
+ollama pull llama3.1:8b
 ```
 
 #### 2. Backend Setup
@@ -357,8 +363,8 @@ git clone <repository-url>
 cd chatbot/backend
 
 # Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -378,13 +384,34 @@ npm install
 npm start
 ```
 
-#### 4. Access the Application
+#### 4. Configure Environment Variables
+```bash
+cd backend
+
+# Copy example .env file (if exists) or create one
+# Required environment variables:
+# OLLAMA_MODEL=llama3.1:8b
+# SERPAPI_API_KEY=your_serpapi_key_here (optional, for web search)
+```
+
+#### 5. Access the Application
 - **Frontend:** http://localhost:3000
 - **Backend API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
 
+**Quick Start with restart.sh:**
+```bash
+# Restart all services
+./restart.sh --all
+
+# Or restart individually
+./restart.sh --backend
+./restart.sh --frontend
+./restart.sh --ollama
+```
+
 **Core API Endpoints:**
-- `POST /api/chat` — Standard chat with RAG
+- `POST /api/chat` — Standard chat with RAG (supports `use_context` and `include_web_search` params)
 - `POST /api/chat/stream` — Streaming chat responses
 - `GET /api/documents` — List all documents
 - `POST /api/upload/documents` — Upload files
@@ -412,11 +439,13 @@ npm start
 - **Markdown:** React Markdown with syntax highlighting
 
 ### AI/ML Stack
-- **Local LLM:** LLaMA 3 8B (Quantized) via Ollama
+- **Local LLM:** LLaMA 3.1 8B via Ollama (default: `llama3.1:8b`)
 - **Cloud Fallback:** OpenAI GPT-4
 - **Embeddings:** sentence-transformers/all-mpnet-base-v2
 - **Vector Search:** ChromaDB with HNSW indexing
+- **Precise Retrieval:** ColBERT for table cell retrieval
 - **RAG Pipeline:** LangChain with custom prompt engineering
+- **Web Search:** SerpAPI (Google), Brave Search, DuckDuckGo
 
 ### Database Architecture
 - **Metadata:** SQLite (conversations, files, sessions)
@@ -427,39 +456,43 @@ npm start
 
 ## 🧪 Testing & Validation
 
-### Automated Test Suite & Quick Test
+### Testing Features
 
-#### Comprehensive System Tests
+The application includes comprehensive testing capabilities through the backend test suite.
+
+#### Running Tests
 ```bash
 cd backend
+
+# Run all tests (if test suite is available)
 ./tests/run_tests.sh
 
-# Or run specific tests
-python tests/test_comprehensive_system.py
-python test_table_improvements.py
+# Or use the cleanup script to prepare a clean environment
+./scripts/cleanup_system.sh
 ```
 
-#### Test Coverage
+#### Test Coverage Areas
 - **Document Processing:** All file formats with table content
 - **Table Extraction:** PDF, DOCX, Excel, Image tables
 - **Vector Search:** Semantic and hybrid search validation
 - **RAG Pipeline:** End-to-end conversation testing
+- **Web Search:** SerpAPI integration and fallback providers
+- **Three-Mode Search:** Documents, Web, and Hybrid modes
 - **Performance:** Memory usage, processing speed, accuracy
 
-#### Test Data
-```
-test_data/
-├── financial_reports.pdf          # Complex tables and charts
-├── sales_data.xlsx                # Multi-sheet spreadsheets  
-├── product_catalog.docx           # Word tables and formatting
-├── scanned_invoice.png            # OCR table detection
-└── mixed_content_document.pdf     # Text + tables + images
-```
+#### Example Queries to Test
 
-#### Example Table-Specific Questions
-- "What's the total revenue in Q3?"
-- "Show me all products with price > $100"
-- "Summarize the financial data"
+**Documents Only:**
+- "What's the total revenue in Q3?" (requires uploaded documents)
+- "Show me all products with price > $100" (table queries)
+
+**Web Search Only:**
+- "Who is Naren Allam?" (real-time web search)
+- "What are the latest AI trends?" (current information)
+
+**Both (Hybrid):**
+- "Compare our Q3 results with industry benchmarks" (synthesizes documents + web)
+- "What is X person's current role based on our documents and latest web sources?"
 
 ---
 
@@ -536,24 +569,44 @@ chatbot/
 │   │   ├── api/               # API routes
 │   │   │   └── routes/        # Endpoint definitions
 │   │   ├── core/              # Configuration & prompts
+│   │   ├── implementations/   # AI service implementations
+│   │   │   ├── llm_models.py         # LLM providers (Ollama, OpenAI)
+│   │   │   ├── embedding_models.py   # Embedding providers
+│   │   │   ├── vector_databases.py   # Vector DB implementations
+│   │   │   ├── web_search_providers.py  # Web search (SerpAPI, Brave, DuckDuckGo)
+│   │   │   └── web_search_agents.py     # Multi-provider search orchestration
 │   │   ├── models/            # Data models & schemas
 │   │   └── services/          # Business logic
-│   │       ├── document_service.py     # 📊 Enhanced table processing
+│   │       ├── document_service.py     # 📊 Document processing & table extraction
 │   │       ├── vector_service.py       # 🔍 Vector search & metadata
-│   │       ├── chat_service.py         # 💬 RAG pipeline
-│   │       └── database_service.py     # 💾 Multi-DB management
+│   │       ├── chat_service.py         # 💬 RAG pipeline with three-mode search
+│   │       ├── ai_service_manager.py   # 🤖 AI service orchestration
+│   │       ├── colbert_service.py      # 📋 ColBERT table retrieval
+│   │       └── hybrid_search_service.py # 🔀 Hybrid search combining multiple methods
 │   ├── data/                  # SQLite database & files
+│   │   ├── hashed_files/      # Processed document files
+│   │   ├── original_files/    # Original uploaded files
+│   │   └── metadata/          # Document metadata
 │   ├── embeddings/            # ChromaDB storage
-│   ├── tests/                 # Comprehensive test suite
+│   ├── tests/                 # Test suite
+│   │   └── run_tests.sh       # Test runner script
 │   ├── scripts/               # Utility scripts
-│   └── requirements.txt       # Python dependencies
+│   │   └── cleanup_system.sh  # System cleanup script
+│   ├── .env                   # Environment variables (create this)
+│   ├── requirements.txt       # Python dependencies
+│   └── pyproject.toml         # Project configuration
 ├── frontend/                   # React frontend
 │   ├── src/                   # Source code
 │   │   ├── components/        # React components
+│   │   │   ├── ChatPanel.tsx          # Main chat interface
+│   │   │   ├── FileUploadPanel.tsx    # File upload interface
+│   │   │   └── DocumentPreview.tsx    # Document preview
+│   │   ├── config/            # Configuration
 │   │   └── styles/            # Styling & themes
 │   └── package.json           # Node.js dependencies
-├── test_data/                 # Sample files for testing
-└── README.md                  # This comprehensive guide
+├── restart.sh                 # Service restart script
+├── README.md                  # This comprehensive guide
+└── README-ENV.md              # Environment setup guide
 ```
 
 ### Key Development Features
@@ -580,6 +633,8 @@ chatbot/
 ### Environment Configuration
 
 #### Backend Environment Variables
+Create a `.env` file in the `backend/` directory:
+
 ```bash
 # Core Settings
 ENVIRONMENT=development
@@ -588,15 +643,19 @@ LOG_LEVEL=INFO
 
 # AI Model Configuration  
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3:8b-instruct-q8_0
-OPENAI_API_KEY=your_openai_key_here
+OLLAMA_MODEL=llama3.1:8b
+OPENAI_API_KEY=your_openai_key_here  # Optional, for fallback
 DEFAULT_TEMPERATURE=0.7
+
+# Web Search Configuration (Optional)
+SERPAPI_API_KEY=your_serpapi_key_here  # For Google search via SerpAPI
+BRAVE_API_KEY=your_brave_key_here      # Optional, for Brave Search
 
 # Database Settings
 DATABASE_URL=sqlite:///./data/chatbot.db
 VECTOR_DB_PATH=./embeddings
 
-# Processing Settings (Enhanced for Phase 1)
+# Processing Settings
 MAX_CHAT_HISTORY=10
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
@@ -613,24 +672,34 @@ MAX_SEARCH_RESULTS=5
 
 ---
 
-## 📊 Current Statistics & Achievements
+## 📊 Key Features & Capabilities
 
-### System Status & Achievements
-- **📈 905 conversations** processed with enhanced table understanding
-- **📁 28 documents** uploaded and processed with Phase 1 improvements
-- **🔢 5,537 vector embeddings** generated with table metadata enrichment
-- **✅ 100% test success rate** for all Phase 1 enhancements
-- **🚀 Zero downtime** since Phase 1 deployment
-- **90% improvement** in table structure preservation
-- **3x better accuracy** for table-based queries
-- **Complete Excel processing** capability (unlimited rows)
-- **5x enhanced OCR** table detection in images
-- **Real-time streaming** with <50ms latency
-- **95% table detection accuracy** in PDFs
-- **85% query satisfaction rate** for tabular data
-- **Zero critical bugs** in production
-- **Sub-second search performance** across all document types
-- **Seamless local AI integration** with cloud fallback
+### Three-Mode Search System
+- **Documents Only**: Traditional RAG with internal knowledge base
+  - Uses ChromaDB for semantic search
+  - ColBERT for precise table retrieval
+  - No web access, complete privacy
+  
+- **Web Search Only**: Real-time web search without document access
+  - SerpAPI (Google Search) primary provider
+  - Brave Search and DuckDuckGo fallbacks
+  - Latest information from the web
+  
+- **Both (Hybrid)**: Intelligent synthesis mode
+  - Automatic relevancy detection between documents and web sources
+  - Smart synthesis when sources discuss the same topic
+  - Merges information into unified responses
+  - Separates information when sources are unrelated
+
+### System Capabilities
+- **📄 Multi-format Support**: PDF, DOCX, PPTX, Excel, Images, Code files
+- **📊 Advanced Table Processing**: 90% structure preservation, ColBERT retrieval
+- **🤖 Dual LLM Support**: LLaMA 3.1 8B (local) + OpenAI (fallback)
+- **🌐 Web Search Integration**: SerpAPI, Brave Search, DuckDuckGo with intelligent routing
+- **🧠 Intelligent Synthesis**: Automatic merging of relevant document + web information
+- **💬 Real-time Streaming**: SSE with cancellation support
+- **🔒 Privacy-focused**: Complete local processing capabilities
+- **📱 Responsive UI**: Modern design with mobile support
 
 ---
 
@@ -652,33 +721,75 @@ This AI chatbot represents a significant advancement in document-intelligent con
 
 ---
 
+---
+
+## 🚀 Quick Start Examples
+
+### Example 1: Documents Only
+```python
+# Upload documents first, then query
+POST /api/chat
+{
+  "message": "What's the Q3 revenue from our financial reports?",
+  "use_context": true,
+  "include_web_search": false
+}
+```
+
+### Example 2: Web Search Only
+```python
+# Real-time web search without documents
+POST /api/chat
+{
+  "message": "Who is the current CEO of OpenAI?",
+  "use_context": false,
+  "include_web_search": true,
+  "selected_search_engine": "serpapi"
+}
+```
+
+### Example 3: Hybrid Mode (Both)
+```python
+# Synthesizes documents + web results when relevant
+POST /api/chat
+{
+  "message": "Compare our Q3 results with current industry benchmarks",
+  "use_context": true,
+  "include_web_search": true,
+  "selected_search_engine": "serpapi"
+}
+```
+
+---
+
+## 🔧 Maintenance & Utilities
+
+### Cleanup Script
+```bash
+# Clean up databases, logs, and temporary files
+cd backend
+./scripts/cleanup_system.sh
+
+# Force cleanup (skip confirmation)
+./scripts/cleanup_system.sh --force
+
+# Skip backup creation
+./scripts/cleanup_system.sh --skip-backup
+```
+
+### Restart Services
+```bash
+# Restart all services
+./restart.sh --all
+
+# Restart individually
+./restart.sh --backend    # FastAPI backend only
+./restart.sh --frontend   # React frontend only
+./restart.sh --ollama     # Ollama server only
+```
+
+---
+
 *For technical support, feature requests, or contributions, please refer to the project repository or contact the development team.*
 
-**Last Updated:** 2025-01-02 | **Version:** 3.0 (Phases 1-3 Complete, ColBERT Integrated)
-
-### 🎯 Current System Capabilities
-
-#### ✅ **Completed Features**
-- **Phase 1**: Advanced table processing (90% structure preservation)
-- **Phase 2**: ColBERT + Web search integration (95% query accuracy)
-- **Phase 3**: Enhanced UI/UX with stream control
-
-#### 🔄 **In Progress**
-- Test web search integration and install dependencies
-- Add web search UI controls and indicators  
-- Update API endpoints for enhanced search capabilities
-
-#### 🚀 **Advanced Query Capabilities Now Available**
-```python
-# Precise table queries with ColBERT
-"Find all products with revenue > $1M in Q3 2023"
-"Show me the top 5 performers by sales growth"
-"Compare quarterly results across all years"
-
-# Web-enhanced responses
-"What are the latest industry trends in AI?"
-"How does our performance compare to market standards?"
-
-# Combined precision + web intelligence
-"Analyze our Q4 results and compare with current industry benchmarks"
-```
+**Last Updated:** 2025-01-02 | **Version:** 3.1 (Three-Mode Search, Intelligent Synthesis)

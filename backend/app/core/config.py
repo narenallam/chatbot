@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # Ollama Settings
     ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="llama3:8b-instruct-q8_0", env="OLLAMA_MODEL")
+    ollama_model: str = Field(default="llama3.1:8b", env="OLLAMA_MODEL")
     ollama_timeout: int = Field(default=120, env="OLLAMA_TIMEOUT")
 
     # ChromaDB Settings

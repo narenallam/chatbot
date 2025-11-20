@@ -88,33 +88,45 @@ class MultiProviderSearchAgent(WebSearchAgent):
     ) -> List[WebSearchResult]:
         """Perform context-aware search with intelligent provider selection"""
         try:
+            logger.info(f"🔍 search_with_context called - query: '{context.original_query}', preferred_provider: '{context.preferred_provider}'")
+            logger.info(f"📋 Available providers: {[p['name'] for p in self.providers]}")
+            
             # Refine query based on intent
+            logger.info(f"🔧 Refining query...")
             refined_query = await self.refine_query(
                 context.original_query, context.analysis.intent
             )
+            logger.info(f"✅ Refined query: '{refined_query}'")
 
             # Select optimal providers based on context
+            logger.info(f"🎯 Selecting providers...")
             selected_providers = await self._select_providers(context)
+            logger.info(f"✅ Selected providers: {[p['name'] for p in selected_providers]}")
 
             if not selected_providers:
-                logger.warning("No available providers for search")
+                logger.warning("❌ No available providers for search")
                 return []
 
             # Execute search with selected providers
+            logger.info(f"🚀 Executing search with {len(selected_providers)} provider(s)...")
             results = await self._execute_search(
                 refined_query, context, selected_providers
             )
+            logger.info(f"✅ _execute_search returned {len(results)} raw results")
 
             # Post-process and rank results
+            logger.info(f"🔀 Post-processing results...")
             processed_results = await self._post_process_results(results, context)
 
             logger.info(
-                f"Multi-provider search returned {len(processed_results)} results"
+                f"✅ Multi-provider search returned {len(processed_results)} processed results"
             )
             return processed_results
 
         except Exception as e:
-            logger.error(f"Multi-provider search failed: {e}")
+            logger.error(f"❌ Multi-provider search failed: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return []
 
     async def refine_query(self, query: str, intent: SearchIntent) -> str:
@@ -165,11 +177,14 @@ class MultiProviderSearchAgent(WebSearchAgent):
     async def _select_providers(self, context: SearchContext) -> List[Dict[str, Any]]:
         """Select optimal providers based on context and availability"""
         try:
+            logger.info(f"🔍 Checking availability for {len(self.providers)} providers...")
             available_providers = []
 
             # Check provider availability
             for provider_info in self.providers:
+                provider_name = provider_info["name"]
                 try:
+                    logger.debug(f"  Checking availability for '{provider_name}'...")
                     is_available = await provider_info["instance"].check_availability()
                     if is_available:
                         rate_limit_info = provider_info[
@@ -177,22 +192,31 @@ class MultiProviderSearchAgent(WebSearchAgent):
                         ].get_rate_limit_info()
                         provider_info["rate_limit"] = rate_limit_info
                         available_providers.append(provider_info)
+                        logger.info(f"  ✅ '{provider_name}' is available")
+                    else:
+                        logger.warning(f"  ❌ '{provider_name}' is not available")
                 except Exception as e:
                     logger.warning(
-                        f"Failed to check availability for {provider_info['name']}: {e}"
+                        f"  ⚠️ Failed to check availability for {provider_name}: {e}", exc_info=True
                     )
 
+            logger.info(f"📋 Found {len(available_providers)} available providers: {[p['name'] for p in available_providers]}")
+
             if not available_providers:
+                logger.error("❌ No available providers found!")
                 return []
 
             # Apply context-based selection strategy
+            logger.info(f"🎯 Applying selection strategy...")
             selected = self._apply_selection_strategy(available_providers, context)
 
-            logger.info(f"Selected providers: {[p['name'] for p in selected]}")
+            logger.info(f"✅ Selected providers: {[p['name'] for p in selected]}")
             return selected
 
         except Exception as e:
-            logger.error(f"Error selecting providers: {e}")
+            logger.error(f"❌ Error selecting providers: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return self.providers[:1]  # Fallback to first provider
 
     def _apply_selection_strategy(
@@ -207,6 +231,8 @@ class MultiProviderSearchAgent(WebSearchAgent):
                     "duckduckgo": "duckduckgo",
                     "brave": "brave_search",
                     "bing": "serpapi",  # SerpAPI provides Bing/Google results
+                    "serpapi": "serpapi",  # Direct SerpAPI mapping
+                    "google": "serpapi",  # SerpAPI provides Google results
                 }
 
                 backend_provider_name = provider_mapping.get(context.preferred_provider)
@@ -342,11 +368,14 @@ class MultiProviderSearchAgent(WebSearchAgent):
         start_time = datetime.now()
 
         try:
+            logger.info(f"🔍 _search_with_provider called - provider: '{provider_name}', query: '{query}'")
+            
             # Update stats
             self.provider_stats[provider_name]["requests"] += 1
             self.provider_stats[provider_name]["last_used"] = start_time
 
             # Execute search
+            logger.info(f"📞 Calling provider_instance.search() for '{provider_name}'...")
             results = await asyncio.wait_for(
                 provider_instance.search(
                     query=query,
@@ -365,17 +394,19 @@ class MultiProviderSearchAgent(WebSearchAgent):
             ) / stats["successes"]
 
             logger.info(
-                f"Provider {provider_name} returned {len(results)} results in {response_time:.2f}s"
+                f"✅ Provider {provider_name} returned {len(results)} results in {response_time:.2f}s"
             )
             return results
 
         except asyncio.TimeoutError:
-            logger.warning(f"Provider {provider_name} timed out")
+            logger.warning(f"⏱️ Provider {provider_name} timed out after {self.timeout_per_provider}s")
             self.provider_stats[provider_name]["failures"] += 1
             return []
 
         except Exception as e:
-            logger.error(f"Provider {provider_name} failed: {e}")
+            logger.error(f"❌ Provider {provider_name} failed: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             self.provider_stats[provider_name]["failures"] += 1
             return []
 

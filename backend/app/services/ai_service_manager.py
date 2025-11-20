@@ -66,7 +66,7 @@ class AIServiceManager:
             "errors": 0,
         }
 
-    async def initialize(self, config: Optional[AIConfig] = None) -> bool:
+    async def initialize(self, config: Optional[AIConfig] = None, allow_partial: bool = False) -> bool:
         """
         Initialize AI services with given configuration
 
@@ -158,8 +158,11 @@ class AIServiceManager:
     async def _initialize_web_search_components(self, config: AIConfig):
         """Initialize web search components"""
         try:
+            logger.info("🔧 Starting web search components initialization...")
+            
             # Get web search configuration
             web_search_config = getattr(config, "search_config", {})
+            logger.info(f"📋 Web search config: enabled={web_search_config.get('enabled', True)}")
 
             if not web_search_config.get("enabled", True):
                 logger.info("Web search disabled in configuration")
@@ -168,6 +171,7 @@ class AIServiceManager:
             # Initialize query analyzer
             analyzer_type = web_search_config.get("analyzer_type", "rule_based")
             analyzer_config = web_search_config.get("analyzer_config", {})
+            logger.info(f"🔍 Initializing query analyzer: {analyzer_type}")
 
             # Pass LLM model to analyzer if using LLM-powered analyzer
             if analyzer_type == "llm_powered" and self.llm_model:
@@ -176,36 +180,48 @@ class AIServiceManager:
             self.query_analyzer = WebSearchProviderRegistry.create_analyzer(
                 analyzer_type, analyzer_config
             )
-            logger.info(f"Initialized query analyzer: {analyzer_type}")
+            logger.info(f"✅ Initialized query analyzer: {analyzer_type}")
 
             # Initialize content processor
             processor_type = web_search_config.get("processor_type", "advanced")
             processor_config = web_search_config.get("processor_config", {})
+            logger.info(f"🔄 Initializing content processor: {processor_type}")
             self.content_processor = WebSearchProviderRegistry.create_processor(
                 processor_type, processor_config
             )
-            logger.info(f"Initialized content processor: {processor_type}")
+            logger.info(f"✅ Initialized content processor: {processor_type}")
 
             # Initialize result fusion engine
             fusion_type = web_search_config.get("fusion_type", "intelligent")
             fusion_config = web_search_config.get("fusion_config", {})
+            logger.info(f"🔀 Initializing result fusion: {fusion_type}")
             self.result_fusion = WebSearchProviderRegistry.create_fusion_engine(
                 fusion_type, fusion_config
             )
-            logger.info(f"Initialized result fusion: {fusion_type}")
+            logger.info(f"✅ Initialized result fusion: {fusion_type}")
 
             # Initialize web search agent
             agent_type = web_search_config.get("agent_type", "multi_provider")
             agent_config = web_search_config.get("agent_config", {})
+            logger.info(f"🤖 Initializing web search agent: {agent_type}")
+            logger.info(f"📦 Agent config providers: {agent_config.get('providers', {}).keys()}")
+            logger.info(f"📦 Agent config provider_priority: {agent_config.get('provider_priority', [])}")
+            
             self.web_search_agent = WebSearchProviderRegistry.create_agent(
                 agent_type, agent_config
             )
-            logger.info(f"Initialized web search agent: {agent_type}")
+            logger.info(f"✅ Initialized web search agent: {agent_type}")
+            
+            # Log provider availability
+            if hasattr(self.web_search_agent, 'providers'):
+                logger.info(f"📋 Available providers: {[p['name'] for p in self.web_search_agent.providers]}")
 
-            logger.info("Web search components initialized successfully")
+            logger.info("✅ Web search components initialized successfully")
 
         except Exception as e:
-            logger.warning(f"Failed to initialize web search components: {e}")
+            logger.error(f"❌ Failed to initialize web search components: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             # Don't raise, as web search is optional
 
     async def _initialize_search_service(self, config: AIConfig):
@@ -311,8 +327,20 @@ class AIServiceManager:
             Search results
         """
         try:
+            # Check if web search is requested and components are available
+            has_web_components = self.web_search_agent is not None and self.query_analyzer is not None
+            
+            # Allow web-only search even if full initialization failed
+            if include_web_search and has_web_components:
+                logger.info(f"🌐 Web search requested - using web search components")
+                # Force web-only search when web search is requested
+                return await self._web_search_only(
+                    query, k, filters, selected_search_engine
+                )
+            
+            # For document search, require full initialization
             if not self.is_initialized or not self.search_service:
-                logger.error("Search service not available")
+                logger.error("Search service not available - requires full initialization")
                 return []
 
             # Analyze query for web search routing
@@ -348,7 +376,9 @@ class AIServiceManager:
                 return results
 
         except Exception as e:
-            logger.error(f"Error in search: {e}")
+            logger.error(f"❌ Error in search: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             self.metrics["errors"] += 1
             return []
 
@@ -361,12 +391,20 @@ class AIServiceManager:
     ) -> List[SearchResult]:
         """Perform web search only"""
         try:
-            if not self.web_search_agent or not self.query_analyzer:
-                logger.warning("Web search components not available")
+            logger.info(f"🌐 _web_search_only called: query='{query}', k={k}, engine='{selected_search_engine}'")
+            
+            if not self.web_search_agent:
+                logger.error("❌ Web search agent is None - not initialized")
+                return []
+            
+            if not self.query_analyzer:
+                logger.error("❌ Query analyzer is None - not initialized")
                 return []
 
             # Analyze query
+            logger.info(f"🔍 Analyzing query: '{query}'")
             query_analysis = await self.query_analyzer.analyze_query(query)
+            logger.info(f"✅ Query analysis complete - intent: {query_analysis.intent}")
 
             # Create search context
             search_context = SearchContext(
@@ -378,11 +416,14 @@ class AIServiceManager:
                 recency_weight=0.7 if query_analysis.requires_latest else 0.3,
                 preferred_provider=selected_search_engine,
             )
+            logger.info(f"📝 Search context created - preferred_provider: '{selected_search_engine}'")
 
             # Perform web search
+            logger.info(f"🚀 Calling web_search_agent.search_with_context()...")
             web_results = await self.web_search_agent.search_with_context(
                 search_context
             )
+            logger.info(f"✅ Web search agent returned {len(web_results)} raw results")
 
             # Convert to SearchResult format
             converted_results = []
@@ -395,6 +436,7 @@ class AIServiceManager:
                         "url": web_result.url,
                         "source": web_result.provider,
                         "source_type": "web_search",
+                        "snippet": web_result.snippet,
                         "authority_score": web_result.authority_score,
                         "published_date": web_result.published_date,
                         "is_recent": web_result.is_recent,
@@ -403,15 +445,18 @@ class AIServiceManager:
                     search_type="web_search",
                 )
                 converted_results.append(search_result)
+                logger.debug(f"  Converted result {i+1}: {web_result.title[:50]} - {web_result.url[:50]}")
 
             self.metrics["web_searches_performed"] += 1
             self.metrics["searches_performed"] += 1
 
-            logger.info(f"Web search returned {len(converted_results)} results")
+            logger.info(f"✅ Web search completed - converted {len(converted_results)} results")
             return converted_results
 
         except Exception as e:
-            logger.error(f"Error in web search only: {e}")
+            logger.error(f"❌ Error in web search only: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return []
 
     async def _hybrid_web_document_search(

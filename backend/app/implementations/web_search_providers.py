@@ -525,10 +525,13 @@ class SerpAPIProvider(WebSearchInterface):
     """SerpAPI provider - Google results, 100 searches/month free"""
 
     def __init__(self, config: Dict[str, Any]):
+        logger.info(f"🔧 Initializing SerpAPI provider...")
         self.api_key = config.get("api_key")
         if not self.api_key:
+            logger.error("❌ SerpAPI key not provided in config!")
             raise ValueError("SerpAPI key is required")
 
+        logger.info(f"✅ SerpAPI provider initialized - API key length: {len(self.api_key)}")
         self.base_url = "https://serpapi.com/search"
         self.timeout = config.get("timeout", 15)
         self.monthly_quota = config.get("monthly_quota", 100)
@@ -539,8 +542,14 @@ class SerpAPIProvider(WebSearchInterface):
     ) -> List[WebSearchResult]:
         """Search using SerpAPI (Google results)"""
         try:
+            logger.info(f"🔍 SerpAPI.search() called - query: '{query}', max_results: {max_results}")
+            
+            if not self.api_key:
+                logger.error("❌ SerpAPI API key not set!")
+                return []
+            
             if self.requests_made >= self.monthly_quota:
-                logger.warning("SerpAPI monthly quota exceeded")
+                logger.warning(f"⚠️ SerpAPI monthly quota exceeded ({self.requests_made}/{self.monthly_quota})")
                 return []
 
             params = {
@@ -551,23 +560,33 @@ class SerpAPIProvider(WebSearchInterface):
                 "hl": "en",
                 "gl": "us",
             }
+            
+            logger.info(f"🌐 Making SerpAPI request to: {self.base_url}")
+            logger.debug(f"   Query: {query}")
+            logger.debug(f"   API key: {self.api_key[:10]}... (hidden)")
 
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.timeout)
             ) as session:
                 async with session.get(self.base_url, params=params) as response:
                     self.requests_made += 1
+                    logger.info(f"📡 SerpAPI response status: {response.status}")
 
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"SerpAPI error {response.status}: {error_text}")
+                        logger.error(f"❌ SerpAPI error {response.status}: {error_text}")
                         return []
 
                     data = await response.json()
-                    return self._parse_serp_results(data, include_content)
+                    logger.info(f"✅ SerpAPI response received - parsing results...")
+                    results = self._parse_serp_results(data, include_content)
+                    logger.info(f"✅ SerpAPI returned {len(results)} results")
+                    return results
 
         except Exception as e:
-            logger.error(f"SerpAPI search failed: {e}")
+            logger.error(f"❌ SerpAPI search failed: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return []
 
     def _parse_serp_results(
@@ -713,23 +732,23 @@ class SerpAPIProvider(WebSearchInterface):
     async def check_availability(self) -> bool:
         """Check if SerpAPI is available and has quota"""
         try:
+            logger.info(f"🔍 SerpAPI.check_availability() called - requests_made: {self.requests_made}/{self.monthly_quota}")
+            
             if self.requests_made >= self.monthly_quota:
+                logger.warning(f"⚠️ SerpAPI quota exceeded: {self.requests_made}/{self.monthly_quota}")
                 return False
 
-            params = {
-                "q": "test",
-                "api_key": self.api_key,
-                "engine": "google",
-                "num": 1,
-            }
+            # Simplified check - just verify we have an API key and haven't exceeded quota
+            # Don't make actual API call during availability check to avoid using quota
+            if not self.api_key:
+                logger.error("❌ SerpAPI API key not set")
+                return False
+                
+            logger.info(f"✅ SerpAPI is available (has API key and quota remaining)")
+            return True
 
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as session:
-                async with session.get(self.base_url, params=params) as response:
-                    return response.status == 200
-
-        except Exception:
+        except Exception as e:
+            logger.error(f"❌ SerpAPI availability check failed: {e}", exc_info=True)
             return False
 
     def get_rate_limit_info(self) -> Dict[str, Any]:

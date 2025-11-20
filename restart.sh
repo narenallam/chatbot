@@ -102,14 +102,14 @@ start_backend() {
     fi
     
     # Check if virtual environment exists
-    if [ ! -f "backend/venv/bin/activate" ]; then
+    if [ ! -f "backend/.venv/bin/activate" ]; then
         echo -e "${RED}❌ Python virtual environment not found${NC}"
-        echo -e "${CYAN}ℹ️  Run: cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt${NC}"
+        echo -e "${CYAN}ℹ️  Run: cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt${NC}"
         return 1
     fi
     
     cd backend
-    source venv/bin/activate
+    source .venv/bin/activate
     python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > uvicorn.log 2>&1 &
     BACKEND_PID=$!
     cd ..

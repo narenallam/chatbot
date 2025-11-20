@@ -15,7 +15,7 @@ class OllamaLLM(LLMInterface):
     
     def __init__(self, config: Dict[str, Any]):
         self.base_url = config.get('base_url', 'http://localhost:11434')
-        self.model_name = config.get('model_name', 'llama3:8b-instruct-q8_0')
+        self.model_name = config.get('model_name', 'llama3.1:8b')
         self.temperature = config.get('temperature', 0.7)
         self.max_tokens = config.get('max_tokens', 2048)
         
