@@ -159,6 +159,36 @@ const ConsoleToggle = styled.button`
   }
 `;
 
+const ModelSelector = styled.select`
+  background: linear-gradient(135deg, rgba(255, 165, 0, 0.07) 0%, rgba(255, 140, 0, 0.07) 100%);
+  border: 1px solid #ff9800;
+  color: #ff9800;
+  padding: 8px 14px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  outline: none;
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ff9800' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  
+  &:hover {
+    color: #ffffff;
+    border-color: #ff9800;
+    background: linear-gradient(135deg, rgba(255, 165, 0, 0.14) 0%, rgba(255, 140, 0, 0.14) 100%);
+  }
+  
+  option {
+    background: #2a2a2a;
+    color: #ffffff;
+    padding: 8px;
+  }
+`;
+
 const NewChatButton = styled.button`
   background: linear-gradient(135deg, rgba(57, 255, 20, 0.07) 0%, rgba(57, 255, 20, 0.07) 100%);
   border: 1px solid #28b80f;
@@ -240,7 +270,8 @@ function App() {
   const [isConsoleVisible, setIsConsoleVisible] = useState(false);
   const [isStreamingResponse, setIsStreamingResponse] = useState(false);
   const [currentStreamController, setCurrentStreamController] = useState<AbortController | null>(null);
-  const [contextInfo, setContextInfo] = useState<{model_name: string, context_window: number, buffer_size: number} | null>(null);
+  const [contextInfo, setContextInfo] = useState<{ model_name: string, context_window: number, buffer_size: number } | null>(null);
+  const [selectedModelProvider, setSelectedModelProvider] = useState<'ollama' | 'gemini'>('ollama'); // Default to local
 
   // Add cache busting utility
   const addCacheBuster = (url: string): string => {
@@ -257,7 +288,7 @@ function App() {
       'Expires': '0',
       ...options.headers,
     };
-    
+
     return fetch(bustedUrl, {
       ...options,
       headers,
@@ -322,7 +353,7 @@ function App() {
     // Clear current messages first to avoid any conflicts
     setMessages([]);
     setCurrentConversationId(null);
-    
+
     const newConversation: Conversation = {
       id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // More unique ID
       title: 'New Conversation',
@@ -337,12 +368,12 @@ function App() {
 
   const updateCurrentConversation = (newMessages: ChatMessage[]) => {
     const conversationId = currentConversationId;
-    
+
     // Only update if conversation already exists - never create here
     if (conversationId) {
       setConversations(prev => prev.map(conv => {
         if (conv.id === conversationId) {
-          const title = newMessages.length > 0 ? 
+          const title = newMessages.length > 0 ?
             newMessages[0].content.slice(0, 50) + (newMessages[0].content.length > 50 ? '...' : '') :
             'New Conversation';
           return {
@@ -460,7 +491,7 @@ function App() {
 
   const sendMessage = async (message: string, searchMode: 'documents' | 'web' | 'hybrid' = 'documents', selectedSearchEngine: string = 'serpapi') => {
     if (!message.trim()) return;
-    
+
     console.log('🚀 Sending message:', message);
     console.log('📝 Current messages count:', messages.length);
 
@@ -483,7 +514,7 @@ function App() {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       // Set conversation immediately to prevent multiple creations
       setCurrentConversationId(newConversation.id);
       setConversations(prev => [newConversation, ...prev]);
@@ -527,7 +558,8 @@ function App() {
           use_context: searchMode !== 'web',  // Use documents unless web-only mode
           include_web_search: searchMode !== 'documents',  // Use web search unless documents-only mode
           selected_search_engine: selectedSearchEngine,
-          temperature: 0.7
+          temperature: 0.7,
+          model_provider: selectedModelProvider
         }),
         signal: abortController.signal
       });
@@ -543,11 +575,11 @@ function App() {
 
       const decoder = new TextDecoder();
       let buffer = '';
-      
+
       // Immediate update function for real-time typewriter effect
       const updateContent = () => {
-        setMessages(prev => prev.map(msg => 
-          msg.id === aiMessageId 
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessageId
             ? { ...msg, content: currentContent }
             : msg
         ));
@@ -565,7 +597,7 @@ function App() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              
+
               if (data.type === 'content') {
                 currentContent += data.content;
                 // Update immediately for real-time typewriter effect
@@ -590,8 +622,8 @@ function App() {
 
       // Update with the complete response
       setMessages(prev => {
-        const finalMessages = prev.map(msg => 
-          msg.id === aiMessageId 
+        const finalMessages = prev.map(msg =>
+          msg.id === aiMessageId
             ? { ...msg, content: currentContent || 'No response received', sources: documentSources }
             : msg
         );
@@ -610,7 +642,7 @@ function App() {
           neonColor: '#ffaa00'
         };
         setMessages(prev => {
-          const finalMessages = prev.map(msg => 
+          const finalMessages = prev.map(msg =>
             msg.id === aiMessageId ? cancelledMessage : msg
           );
           updateCurrentConversation(finalMessages);
@@ -625,7 +657,7 @@ function App() {
           neonColor: '#ff4444'
         };
         setMessages(prev => {
-          const finalMessages = prev.map(msg => 
+          const finalMessages = prev.map(msg =>
             msg.id === aiMessageId ? errorMessage : msg
           );
           updateCurrentConversation(finalMessages);
@@ -647,7 +679,7 @@ function App() {
       setConversations([]);
       localStorage.removeItem('ai-mate-conversations');
       localStorage.removeItem('ai-mate-current-conversation');
-      
+
       // Also clear backend conversations
       await fetch(`${BACKEND_URL}/api/admin/reset-database`, {
         method: 'POST',
@@ -658,17 +690,17 @@ function App() {
         console.warn('Failed to reset backend database:', err);
         // Continue even if backend reset fails
       });
-      
+
       // Clear documents from state
       setUploadedDocuments([]);
       localStorage.removeItem('ai-mate-documents');
-      
+
       // Refresh system status after clearing
       setTimeout(() => {
         checkSystemStatus(false);
         loadDocumentsFromBackend();
       }, 500);
-      
+
     } catch (error) {
       console.error('Error clearing chat:', error);
       // Still clear frontend even if backend fails
@@ -684,10 +716,10 @@ function App() {
 
     // Do not show console automatically on upload
     // setIsConsoleVisible(true);
-    
+
     // Set processing state and start CPU monitoring
     setSystemStatus(prev => ({ ...prev, isProcessing: true, cpuUsage: 0 }));
-    
+
     // Simulate CPU usage during processing (in a real app, this would come from the backend)
     const cpuMonitorInterval = setInterval(() => {
       const cpuUsage = Math.floor(Math.random() * 40) + 30; // 30-70% usage during processing
@@ -708,7 +740,7 @@ function App() {
 
       if (response.ok) {
         const data = await response.json();
-        
+
         // Process each file result from the upload response
         if (data.files && Array.isArray(data.files)) {
           data.files.forEach((fileResult: any) => {
@@ -719,7 +751,7 @@ function App() {
                 success: fileResult.status === 'success',
                 response: fileResult
               });
-              
+
               // Add to uploaded documents list
               if (fileResult.status === 'success') {
                 const newDoc: UploadedDocument = {
@@ -749,7 +781,7 @@ function App() {
                 };
                 setUploadedDocuments(prev => [errorDoc, ...prev]);
               }
-              
+
               // Notify the FileUploadPanel about the result
               if (fileUploadCallback) {
                 fileUploadCallback(matchingFile, fileResult);
@@ -757,11 +789,11 @@ function App() {
             }
           });
         }
-        
+
         // Note: System status will be updated by the periodic check
       } else {
         const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
-        
+
         // If upload request failed, mark all files as failed
         files.forEach(file => {
           results.push({
@@ -769,7 +801,7 @@ function App() {
             success: false,
             error: errorData.message || 'Upload failed'
           });
-          
+
           if (fileUploadCallback) {
             fileUploadCallback(file, { status: 'error', message: errorData.message || 'Upload failed' });
           }
@@ -777,7 +809,7 @@ function App() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      
+
       // If network error, mark all files as failed  
       files.forEach(file => {
         results.push({
@@ -785,19 +817,19 @@ function App() {
           success: false,
           error: errorMessage
         });
-        
+
         if (fileUploadCallback) {
           fileUploadCallback(file, { status: 'error', message: errorMessage });
         }
       });
-      
+
       console.error('Upload failed:', error);
     } finally {
       // Stop CPU monitoring and reset processing state
       clearInterval(cpuMonitorInterval);
       setSystemStatus(prev => ({ ...prev, isProcessing: false, cpuUsage: 0 }));
     }
-    
+
     return results;
   };
 
@@ -828,12 +860,12 @@ function App() {
   useEffect(() => {
     loadFromStorage();
     checkSystemStatus(false); // Initial status check
-    
+
     // Only load documents if not streaming to avoid conflicts
     if (!isStreamingResponse) {
       loadDocumentsFromBackend();
     }
-    
+
     const interval = setInterval(() => {
       checkSystemStatus(); // Subsequent checks respect streaming state
     }, 60000); // Every 60 seconds (reduced frequency)
@@ -878,21 +910,29 @@ function App() {
   return (
     <AppContainer>
       <GlobalStyles />
-      
+
       <Header>
         <Title>AI MATE</Title>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {contextInfo && (
-            <span style={{color: '#ffe066', fontSize: '0.95rem', fontWeight: 400, letterSpacing: 0.2, background: 'rgba(0,0,0,0.0)', padding: '0 8px'}}>
-              Model: <span style={{color:'#fff'}}>{contextInfo.model_name}</span>
+          <span style={{ color: '#ffe066', fontSize: '0.95rem', fontWeight: 400, letterSpacing: 0.2, background: 'rgba(0,0,0,0.0)', padding: '0 8px' }}>
+            Model: <span style={{ color: '#fff' }}>
+              {selectedModelProvider === 'gemini' ? 'gemini-2.0-flash-exp' : 'llama3.1:8b'}
             </span>
-          )}
+          </span>
+          <ModelSelector
+            value={selectedModelProvider}
+            onChange={(e) => setSelectedModelProvider(e.target.value as 'ollama' | 'gemini')}
+            title="Select AI model"
+          >
+            <option value="ollama">Local (Ollama)</option>
+            <option value="gemini">Gemini</option>
+          </ModelSelector>
           <NewChatButton onClick={createNewConversation} title="New chat">
             <MessageSquare size={16} color="#39FF14" />
             New chat
           </NewChatButton>
-          <ConsoleToggle 
-            className={isConsoleVisible ? 'active' : ''} 
+          <ConsoleToggle
+            className={isConsoleVisible ? 'active' : ''}
             onClick={() => setIsConsoleVisible(!isConsoleVisible)}
             title="Toggle processing console"
           >
@@ -906,20 +946,20 @@ function App() {
       <MainContent>
         <PanelGroup direction="horizontal">
           <PanelContainer defaultSize={25} minSize={20} maxSize={35}>
-            <FileUploadPanel 
-              onFileUpload={handleFileUpload} 
+            <FileUploadPanel
+              onFileUpload={handleFileUpload}
               onRegisterCallback={setFileUploadCallback}
               uploadedDocuments={uploadedDocuments}
               onRefreshDocuments={refreshDocuments}
               logToConsole={logToConsole}
             />
           </PanelContainer>
-          
+
           <ResizeHandle />
-          
+
           <PanelContainer defaultSize={55} minSize={30}>
-            <ChatPanel 
-              messages={messages} 
+            <ChatPanel
+              messages={messages}
               onSendMessage={sendMessage}
               onFileUpload={handleFileUpload}
               isLoading={isStreamingResponse}
@@ -933,15 +973,15 @@ function App() {
               contextInfo={contextInfo}
             />
           </PanelContainer>
-          
+
           <ResizeHandle />
-          
+
           <PanelContainer defaultSize={20} minSize={15} maxSize={30}>
-            <ConversationPanel 
+            <ConversationPanel
               conversations={conversations}
               currentConversationId={currentConversationId}
               onLoadConversation={loadConversation}
-              onNewConversation={() => {}}
+              onNewConversation={() => { }}
               onClearChat={clearChat}
               contextInfo={contextInfo}
             />
@@ -949,8 +989,8 @@ function App() {
         </PanelGroup>
       </MainContent>
 
-      <Console 
-        isVisible={isConsoleVisible} 
+      <Console
+        isVisible={isConsoleVisible}
         onToggle={() => setIsConsoleVisible(false)}
       />
     </AppContainer>

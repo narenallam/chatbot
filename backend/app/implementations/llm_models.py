@@ -400,7 +400,159 @@ class HuggingFaceLLM(LLMInterface):
             "max_length": self.max_length
         }
 
+class GeminiLLM(LLMInterface):
+    """Google Gemini LLM implementation"""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.api_key = config.get('api_key')
+        self.model_name = config.get('model_name', 'gemini-pro')
+        self.temperature = config.get('temperature', 0.7)
+        self.max_tokens = config.get('max_tokens', 2048)
+        
+        if not self.api_key:
+            raise ValueError("Gemini API key is required")
+        
+        self.client = None
+        self._initialize_client()
+    
+    def _initialize_client(self):
+        """Initialize Gemini client"""
+        try:
+            import google.generativeai as genai
+            
+            genai.configure(api_key=self.api_key)
+            self.client = genai.GenerativeModel(self.model_name)
+            
+            logger.info(f"Initialized Gemini client: {self.model_name}")
+            
+        except ImportError:
+            logger.error("google-generativeai not available. Install with: pip install google-generativeai")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini client: {e}")
+            raise
+    
+    async def generate(self, prompt: str, **kwargs) -> str:
+        """Generate text completion"""
+        try:
+            if not self.client:
+                raise RuntimeError("Client not initialized")
+            
+            # Override temperature if provided
+            temperature = kwargs.get('temperature', self.temperature)
+            
+            # Generate response
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.client.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': temperature,
+                        'max_output_tokens': self.max_tokens,
+                    }
+                )
+            )
+            
+            return response.text
+            
+        except Exception as e:
+            logger.error(f"Error generating with Gemini: {e}")
+            raise
+    
+    async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
+        """Generate streaming text completion"""
+        try:
+            if not self.client:
+                raise RuntimeError("Client not initialized")
+            
+            # Override temperature if provided
+            temperature = kwargs.get('temperature', self.temperature)
+            
+            # Generate streaming response
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': temperature,
+                        'max_output_tokens': self.max_tokens,
+                    },
+                    stream=True
+                )
+            )
+            
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+                    
+        except Exception as e:
+            logger.error(f"Error in Gemini streaming: {e}")
+            raise
+    
+    async def chat(
+        self, 
+        messages: list, 
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        stream: bool = False
+    ) -> str:
+        """Chat-based text generation"""
+        try:
+            if not self.client:
+                raise RuntimeError("Client not initialized")
+            
+            # Convert messages to Gemini format (simple concatenation for now)
+            # Gemini uses a different chat structure, but for compatibility
+            # we'll convert the messages to a single prompt
+            prompt_parts = []
+            for msg in messages:
+                role = msg.get('role', 'user')
+                content = msg.get('content', '')
+                
+                if role == 'system':
+                    prompt_parts.append(f"System: {content}")
+                elif role == 'assistant':
+                    prompt_parts.append(f"Model: {content}")
+                else:
+                    prompt_parts.append(f"User: {content}")
+            
+            prompt = "\n\n".join(prompt_parts)
+            
+            # Generate response
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.client.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': temperature,
+                        'max_output_tokens': max_tokens,
+                    }
+                )
+            )
+            
+            return response.text
+            
+        except Exception as e:
+            logger.error(f"Error in Gemini chat: {e}")
+            raise
+    
+    async def estimate_tokens(self, text: str) -> int:
+        """Estimate token count for text"""
+        # Simple estimation: roughly 4 characters per token
+        return len(text) // 4
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get model information"""
+        return {
+            "type": "gemini",
+            "model_name": self.model_name,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens
+        }
+
 # Register implementations
 ServiceFactory.register_llm_model("ollama", OllamaLLM)
 ServiceFactory.register_llm_model("openai", OpenAILLM)
 ServiceFactory.register_llm_model("huggingface", HuggingFaceLLM)
+ServiceFactory.register_llm_model("gemini", GeminiLLM)

@@ -43,6 +43,7 @@ async def chat_endpoint(request: ChatRequest):
             include_web_search=request.include_web_search,
             temperature=request.temperature,
             selected_search_engine=request.selected_search_engine,
+            model_provider=request.model_provider,
         )
         return response
 
@@ -75,6 +76,7 @@ async def chat_stream_endpoint(chat_request: ChatRequest, request: Request):
                     include_web_search=chat_request.include_web_search,
                     selected_search_engine=chat_request.selected_search_engine,
                     temperature=chat_request.temperature,
+                    model_provider=chat_request.model_provider,
                 ):
                     # Check if client has disconnected
                     if await request.is_disconnected():

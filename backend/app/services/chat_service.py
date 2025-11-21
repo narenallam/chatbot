@@ -77,6 +77,82 @@ class ChatService:
             logger.error(f"Failed to initialize LLM: {e}")
             raise
 
+    def _get_llm_for_provider(self, provider: Optional[str] = None, temperature: Optional[float] = None):
+        """
+        Get LLM instance for the specified provider
+        
+        Args:
+            provider: LLM provider ('ollama', 'openai', 'gemini', or None for default)
+            temperature: Optional temperature override
+            
+        Returns:
+            LLM instance
+        """
+        # Use default provider if not specified
+        if not provider:
+            provider = settings.llm_provider
+        
+        # Set temperature
+        temp = temperature if temperature is not None else settings.default_temperature
+        
+        logger.info(f"🔄 Getting LLM for provider: {provider} with temperature: {temp}")
+        
+        try:
+            if provider == "gemini":
+                # Import Gemini implementation
+                import google.generativeai as genai
+                from app.core.interfaces import ServiceFactory
+                
+                logger.info(f"🤖 Initializing Gemini model: {settings.gemini_model}")
+                
+                # Get Gemini configuration
+                config = {
+                    'api_key': settings.gemini_api_key,
+                    'model_name': settings.gemini_model,
+                    'temperature': temp,
+                    'max_tokens': settings.max_tokens
+                }
+                
+                # Create Gemini LLM instance
+                llm_class = ServiceFactory.get_llm_model("gemini")
+                gemini_instance = llm_class(config)
+                logger.info(f"✅ Successfully initialized Gemini: {settings.gemini_model}")
+                return gemini_instance
+                
+            elif provider == "openai":
+                if not settings.openai_api_key:
+                    raise ValueError("OpenAI API key is required")
+                
+                logger.info(f"🤖 Initializing OpenAI model: {settings.openai_model}")
+                    
+                openai_instance = ChatOpenAI(
+                    openai_api_key=settings.openai_api_key,
+                    model_name=settings.openai_model,
+                    temperature=temp,
+                )
+                logger.info(f"✅ Successfully initialized OpenAI: {settings.openai_model}")
+                return openai_instance
+                
+            else:  # ollama or fallback
+                logger.info(f"🤖 Initializing Ollama model: {settings.ollama_model}")
+                
+                ollama_instance = ChatOllama(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model,
+                    temperature=temp,
+                    timeout=120,
+                    request_timeout=120,
+                    num_predict=2048,
+                )
+                logger.info(f"✅ Successfully initialized Ollama: {settings.ollama_model}")
+                return ollama_instance
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize LLM for provider '{provider}': {e}")
+            # Fallback to default Ollama
+            logger.warning("⚠️ Falling back to default LLM instance")
+            return self.llm
+
     async def chat(
         self,
         message: str,
@@ -85,6 +161,7 @@ class ChatService:
         include_web_search: bool = True,
         selected_search_engine: Optional[str] = None,
         temperature: Optional[float] = None,
+        model_provider: Optional[str] = None,
     ) -> ChatResponse:
         """
         Process a chat message with optional RAG context
@@ -96,6 +173,7 @@ class ChatService:
             include_web_search: Whether to include web search in results
             selected_search_engine: Optional search engine selection
             temperature: Optional temperature override
+            model_provider: Optional LLM provider (ollama, openai, gemini)
 
         Returns:
             ChatResponse with AI reply and sources
@@ -196,13 +274,13 @@ class ChatService:
             logger.info("Building chat prompt...")
             prompt = self._build_chat_prompt(message, context_docs, memory, search_mode)
 
-            # Set temperature if provided
-            if temperature is not None:
-                self.llm.temperature = temperature
+            # Get LLM instance for the specified provider
+            llm = self._get_llm_for_provider(model_provider, temperature)
+            logger.info(f"Using LLM provider: {model_provider or settings.llm_provider}")
 
             # Generate response
             logger.info("Generating LLM response...")
-            response = await self._generate_response(prompt)
+            response = await self._generate_response(prompt, llm=llm)
             logger.info(f"LLM response generated: {len(response)} characters")
 
             # Add messages to memory
@@ -244,6 +322,7 @@ class ChatService:
         include_web_search: bool = True,
         selected_search_engine: Optional[str] = None,
         temperature: Optional[float] = None,
+        model_provider: Optional[str] = None,
     ):
         """
         Process a chat message with streaming response
@@ -253,6 +332,7 @@ class ChatService:
             conversation_id: Optional conversation ID for history
             use_context: Whether to use RAG context
             temperature: Optional temperature override
+            model_provider: Optional LLM provider (ollama, openai, gemini)
 
         Yields:
             Streaming response chunks
@@ -364,15 +444,15 @@ class ChatService:
             logger.info("STREAM: Building chat prompt...")
             prompt = self._build_chat_prompt(message, context_docs, memory, search_mode)
 
-            # Set temperature if provided
-            if temperature is not None:
-                self.llm.temperature = temperature
+            # Get LLM instance for the specified provider
+            llm = self._get_llm_for_provider(model_provider, temperature)
+            logger.info(f"STREAM: Using LLM provider: {model_provider or settings.llm_provider}")
 
             # Generate streaming response
             logger.info("STREAM: Starting LLM streaming response...")
             full_response = ""
             chunk_count = 0
-            async for chunk in self._generate_streaming_response(prompt):
+            async for chunk in self._generate_streaming_response(prompt, llm=llm):
                 if chunk:
                     chunk_count += 1
                     full_response += chunk
@@ -785,12 +865,13 @@ class ChatService:
 
         return "\n".join(formatted)
 
-    async def _generate_response(self, prompt: str) -> str:
+    async def _generate_response(self, prompt: str, llm=None) -> str:
         """
         Generate response from LLM
 
         Args:
             prompt: Formatted prompt
+            llm: Optional LLM instance to use (defaults to self.llm)
 
         Returns:
             AI response
@@ -799,27 +880,39 @@ class ChatService:
             logger.info(f"Calling LLM with prompt length: {len(prompt)} characters")
             logger.debug(f"Prompt content: {prompt[:500]}...")  # Log first 500 chars
 
-            # Use invoke for both Ollama and OpenAI
-            messages = [HumanMessage(content=prompt)]
-            logger.info("Invoking LLM...")
-            response = await self.llm.ainvoke(messages)
-            logger.info(f"LLM response received: {len(response.content)} characters")
-            logger.debug(
-                f"Response content: {response.content[:200]}..."
-            )  # Log first 200 chars
-
-            return response.content
+            # Use provided LLM or fall back to default
+            llm_instance = llm if llm is not None else self.llm
+            
+            # Check if this is a LangChain LLM (has ainvoke) or custom LLM (has generate)
+            if hasattr(llm_instance, 'ainvoke'):
+                # LangChain LLM (Ollama, OpenAI)
+                messages = [HumanMessage(content=prompt)]
+                logger.info("Invoking LangChain LLM...")
+                response = await llm_instance.ainvoke(messages)
+                logger.info(f"LLM response received: {len(response.content)} characters")
+                logger.debug(f"Response content: {response.content[:200]}...")
+                return response.content
+            elif hasattr(llm_instance, 'generate'):
+                # Custom LLM implementation (Gemini)
+                logger.info("Invoking custom LLM (generate method)...")
+                response = await llm_instance.generate(prompt)
+                logger.info(f"LLM response received: {len(response)} characters")
+                logger.debug(f"Response content: {response[:200]}...")
+                return response
+            else:
+                raise ValueError(f"LLM instance does not have ainvoke or generate method: {type(llm_instance)}")
 
         except Exception as e:
             logger.error(f"Failed to generate response: {e}", exc_info=True)
             return f"I apologize, but I encountered an error while processing your request: {str(e)}"
 
-    async def _generate_streaming_response(self, prompt: str):
+    async def _generate_streaming_response(self, prompt: str, llm=None):
         """
         Generate streaming AI response using the configured LLM
 
         Args:
             prompt: Formatted prompt string
+            llm: Optional LLM instance to use (defaults to self.llm)
 
         Yields:
             Response chunks
@@ -830,17 +923,35 @@ class ChatService:
             )
             logger.debug(f"STREAM LLM: Prompt preview: {prompt[:300]}...")
 
-            messages = [HumanMessage(content=prompt)]
+            # Use provided LLM or fall back to default
+            llm_instance = llm if llm is not None else self.llm
+            
             chunk_count = 0
 
-            logger.info("STREAM LLM: Calling LLM astream...")
-            async for chunk in self.llm.astream(messages):
-                if hasattr(chunk, "content") and chunk.content:
-                    chunk_count += 1
-                    logger.debug(
-                        f"STREAM LLM: Received chunk {chunk_count}: {len(chunk.content)} chars"
-                    )
-                    yield chunk.content
+            # Check if this is a LangChain LLM (has astream) or custom LLM (has generate_stream)
+            if hasattr(llm_instance, 'astream'):
+                # LangChain LLM (Ollama, OpenAI)
+                messages = [HumanMessage(content=prompt)]
+                logger.info("STREAM LLM: Calling LangChain LLM astream...")
+                async for chunk in llm_instance.astream(messages):
+                    if hasattr(chunk, "content") and chunk.content:
+                        chunk_count += 1
+                        logger.debug(
+                            f"STREAM LLM: Received chunk {chunk_count}: {len(chunk.content)} chars"
+                        )
+                        yield chunk.content
+            elif hasattr(llm_instance, 'generate_stream'):
+                # Custom LLM implementation (Gemini)
+                logger.info("STREAM LLM: Calling custom LLM generate_stream...")
+                async for chunk in llm_instance.generate_stream(prompt):
+                    if chunk:
+                        chunk_count += 1
+                        logger.debug(
+                            f"STREAM LLM: Received chunk {chunk_count}: {len(chunk)} chars"
+                        )
+                        yield chunk
+            else:
+                raise ValueError(f"LLM instance does not have astream or generate_stream method: {type(llm_instance)}")
 
             logger.info(f"STREAM LLM: Completed streaming with {chunk_count} chunks")
 

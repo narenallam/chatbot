@@ -106,6 +106,7 @@ class ChatRequest(BaseModel):
     include_web_search: bool = True
     selected_search_engine: Optional[str] = Field(default="duckduckgo", description="Search engine to use: duckduckgo, brave, bing")
     temperature: Optional[float] = Field(default=0.7, ge=0.0, le=2.0)
+    model_provider: Optional[str] = Field(default=None, description="LLM provider to use: ollama, openai, gemini")
 
 
 class ChatResponse(BaseModel):

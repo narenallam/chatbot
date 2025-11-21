@@ -8,14 +8,15 @@
 
 1. [🌟 Overview & Key Features](#-overview--key-features)
 2. [🏗️ Architecture](#%EF%B8%8F-architecture)
-3. [📊 Enhanced Table Processing (Phase 1)](#-enhanced-table-processing-phase-1)
-4. [🔮 Future Roadmap (Phase 2 & 3)](#-future-roadmap-phase-2--3)
-5. [🚀 Getting Started](#-getting-started)
-6. [💻 Technology Stack](#-technology-stack)
-7. [📡 API Reference](#-api-reference)
-8. [🧪 Testing & Validation](#-testing--validation)
-9. [📈 Performance Metrics](#-performance-metrics)
-10. [🔧 Development Guide](#-development-guide)
+3. [🧠 RAG Architecture Deep Dive](./RAG_ARCHITECTURE.md) ⭐ **NEW**
+4. [📊 Enhanced Table Processing (Phase 1)](#-enhanced-table-processing-phase-1)
+5. [🔮 Future Roadmap (Phase 2 & 3)](#-future-roadmap-phase-2--3)
+6. [🚀 Getting Started](#-getting-started)
+7. [💻 Technology Stack](#-technology-stack)
+8. [📡 API Reference](#-api-reference)
+9. [🧪 Testing & Validation](#-testing--validation)
+10. [📈 Performance Metrics](#-performance-metrics)
+11. [🔧 Development Guide](#-development-guide)
 
 ---
 
@@ -72,6 +73,9 @@ AI MATE is a **state-of-the-art Personal Assistant AI Chatbot** designed for int
 ---
 
 ## 🏗️ Architecture
+
+> **📖 For detailed RAG architecture documentation**, see [RAG_ARCHITECTURE.md](./RAG_ARCHITECTURE.md)  
+> Comprehensive coverage of: Document Processing | Chunking | Embeddings | Retrieval | Reranking | Prompts | Query Processing | Result Synthesis | Flow Diagrams
 
 ### System Overview
 

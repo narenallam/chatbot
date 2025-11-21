@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     openai_max_retries: int = Field(default=3, env="OPENAI_MAX_RETRIES")
     openai_timeout: int = Field(default=60, env="OPENAI_TIMEOUT")
 
+    # Gemini Settings
+    gemini_api_key: Optional[str] = Field(default=None, env="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-pro", env="GEMINI_MODEL")
+
     # Web Search Settings
     web_search_enabled: bool = Field(default=True, env="WEB_SEARCH_ENABLED")
     serpapi_api_key: Optional[str] = Field(default=None, env="SERPAPI_API_KEY")
